@@ -10,10 +10,10 @@ import (
 
 func newOpenCmd() *cobra.Command {
 	targets := map[string]string{
-		"":            "https://console.aphl.ai",
-		"agents":      "https://console.aphl.ai/agents",
-		"marketplace": "https://console.aphl.ai/marketplace",
-		"history":     "https://console.aphl.ai/history",
+		"":            "https://beta.console.aphl.ai",
+		"agents":      "https://beta.console.aphl.ai/agents",
+		"marketplace": "https://beta.console.aphl.ai/marketplace",
+		"history":     "https://beta.console.aphl.ai/history",
 		"docs":        "https://api.aphl.ai/docs",
 	}
 

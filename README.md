@@ -42,7 +42,7 @@ aphelion agent run agent.py \
 aphelion deploy
 # => Agent deployed: review-management-agent
 # => Endpoint: https://api.aphl.ai/v2/agents/agt_.../invoke
-# => Console: https://console.aphl.ai/agents/review-management-agent
+# => Console: https://beta.console.aphl.ai/agents/review-management-agent
 ```
 
 ### What your agent code looks like
@@ -355,7 +355,7 @@ Project config takes precedence over global config on conflicting keys.
 ## Links
 
 - **API Docs:** https://api.aphl.ai/docs
-- **Console:** https://console.aphl.ai
+- **Console:** https://beta.console.aphl.ai
 - **GitHub:** https://github.com/Exmplr-AI/aphelion-cli
 - **Issues:** https://github.com/Exmplr-AI/aphelion-cli/issues
 

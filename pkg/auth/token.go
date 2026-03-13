@@ -124,19 +124,30 @@ func CreateOrGetUser(apiBaseURL, accessToken string) (*UserInfo, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("user profile request failed: %s", string(body))
+		return nil, fmt.Errorf("user profile request failed (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 
+	// Try parsing as {success: bool, user: {...}} first
 	var response struct {
 		Success bool     `json:"success"`
 		User    UserInfo `json:"user"`
+		Message string   `json:"message"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse user profile response: %w", err)
+		// If that fails, try parsing directly as UserInfo (some API versions return user directly)
+		var userInfo UserInfo
+		if err2 := json.Unmarshal(body, &userInfo); err2 != nil {
+			return nil, fmt.Errorf("failed to parse user profile response: %s", string(body))
+		}
+		return &userInfo, nil
+	}
+
+	if response.User.Email != "" || response.User.Sub != "" {
+		return &response.User, nil
 	}
 
 	if !response.Success {
-		return nil, fmt.Errorf("failed to create/get user profile")
+		return nil, fmt.Errorf("failed to create/get user profile: %s (raw: %s)", response.Message, string(body))
 	}
 
 	return &response.User, nil

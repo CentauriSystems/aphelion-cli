@@ -57,7 +57,7 @@ func toActionableError(statusCode int, endpoint string, rawMessage string) error
 		return &ActionableError{
 			StatusCode: statusCode,
 			Message:    "The Aphelion API is experiencing issues.",
-			Suggestion: "Check status at https://console.aphl.ai or try again shortly.",
+			Suggestion: "Check status at https://beta.console.aphl.ai or try again shortly.",
 		}
 	}
 

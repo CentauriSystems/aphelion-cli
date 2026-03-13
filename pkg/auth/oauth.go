@@ -204,7 +204,7 @@ func createCallbackHandler(resultChan chan<- *AuthResult, expectedState string) 
 			result = &AuthResult{Code: code}
 			
 			// Redirect to success page
-			w.Header().Set("Location", "https://console.aphl.ai/auth/success")
+			w.Header().Set("Location", "https://beta.console.aphl.ai/auth/success")
 			w.WriteHeader(http.StatusFound)
 		} else {
 			result = &AuthResult{Error: "No authorization code received"}

@@ -245,7 +245,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Endpoint:  ")
 	cyan.Println(deployEndpoint)
 	fmt.Printf("  Console:   ")
-	cyan.Printf("https://console.aphl.ai/agents/%s\n", name)
+	cyan.Printf("https://beta.console.aphl.ai/agents/%s\n", name)
 	fmt.Printf("  Status:    ")
 	green.Println("active")
 	fmt.Println()

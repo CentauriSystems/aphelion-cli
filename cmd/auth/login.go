@@ -63,8 +63,9 @@ func oauthLogin(noLaunchBrowser bool) error {
 		return fmt.Errorf("failed to get OAuth configuration: %w", err)
 	}
 
-	// Always use correct client_id and audience (API may return stale values)
+	// Always use correct client_id (API may return stale values)
 	oauthConfig.ClientID = "OCpj3nYGG00qHPaZlBiPn5GCidOn08ql"
+	// Audience must match the Auth0 API identifier registered in the tenant
 	oauthConfig.Audience = "https://api.aphl.ai"
 
 	// Update redirect URI to use localhost
@@ -132,11 +133,17 @@ func completeOAuthFlow(oauthConfig *authPkg.OAuthConfig, code string) error {
 		return fmt.Errorf("failed to exchange code for token: %w", err)
 	}
 
-	// Create/get user in Aphelion database
-	userInfo, err := authPkg.CreateOrGetUser(config.GetAPIUrl(), tokenResp.AccessToken)
+	// Get user info from Auth0 userinfo endpoint (always works with a valid token)
+	userInfo, err := authPkg.GetUserInfo(oauthConfig, tokenResp.AccessToken)
 	if err != nil {
 		spinner.Stop()
-		return fmt.Errorf("failed to create/get user profile: %w", err)
+		return fmt.Errorf("failed to get user info: %w", err)
+	}
+
+	// Try to register/sync with Aphelion backend (non-fatal if it fails)
+	if _, err := authPkg.CreateOrGetUser(config.GetAPIUrl(), tokenResp.AccessToken); err != nil {
+		// Backend sync failed — not critical for login, user is still authenticated
+		utils.PrintWarning("Could not sync profile with Aphelion backend: %v", err)
 	}
 
 	spinner.Stop()
