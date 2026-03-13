@@ -63,10 +63,9 @@ func oauthLogin(noLaunchBrowser bool) error {
 		return fmt.Errorf("failed to get OAuth configuration: %w", err)
 	}
 
-	// Set default client_id if not provided by API
-	if oauthConfig.ClientID == "" {
-		oauthConfig.ClientID = "OCpj3nYGG00qHPaZlBiPn5GCidOn08ql" // Correct client_id
-	}
+	// Always use correct client_id and audience (API may return stale values)
+	oauthConfig.ClientID = "OCpj3nYGG00qHPaZlBiPn5GCidOn08ql"
+	oauthConfig.Audience = "https://api.aphl.ai"
 
 	// Update redirect URI to use localhost
 	oauthConfig.RedirectURI = "http://localhost:8765/callback"
