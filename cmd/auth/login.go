@@ -88,7 +88,8 @@ func oauthLogin(noLaunchBrowser bool) error {
 		oauthConfig.State = state
 
 		// Build auth URL with PKCE (includes offline_access for refresh tokens)
-		authURL := fmt.Sprintf("%s?response_type=code&client_id=%s&redirect_uri=%s&scope=openid%%20profile%%20email%%20offline_access&audience=%s&code_challenge=%s&code_challenge_method=S256&state=%s",
+		// prompt=login forces a fresh Auth0 session, avoiding "Invalid session" errors
+		authURL := fmt.Sprintf("%s?response_type=code&client_id=%s&redirect_uri=%s&scope=openid%%20profile%%20email%%20offline_access&audience=%s&code_challenge=%s&code_challenge_method=S256&state=%s&prompt=login",
 			oauthConfig.AuthURL,
 			oauthConfig.ClientID,
 			oauthConfig.RedirectURI,
