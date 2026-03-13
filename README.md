@@ -2,7 +2,9 @@
 
 The SDK for Aphelion — an AI agent marketplace and infrastructure platform.
 
-Build agents that orchestrate API tools, deploy them to the cloud, and monetize them in the marketplace. The CLI handles auth, memory, tool calls, and deployment so you write only business logic.
+Build agents that orchestrate API tools, deploy them to the cloud, and earn per execution when others use them in the marketplace. The CLI handles auth, memory, tool calls, and deployment so you write only business logic.
+
+Agent code can be written in **Python**, **Node.js**, or **Go**.
 
 ## Installation
 
@@ -38,7 +40,49 @@ aphelion agent run agent.py \
 
 # 6. Deploy to Aphelion Cloud
 aphelion deploy
+# => Agent deployed: review-management-agent
+# => Endpoint: https://api.aphl.ai/v2/agents/agt_.../invoke
+# => Console: https://console.aphl.ai/agents/review-management-agent
 ```
+
+### What your agent code looks like
+
+`aphelion agent init` generates a complete, runnable agent. Here's what the Python code looks like:
+
+```python
+from aphelion import Agent, tools, memory
+
+agent = Agent()
+
+@agent.run
+async def main(input: dict) -> dict:
+    patient_name = input.get("patient_name")
+    contact = input.get("contact")
+
+    # Check memory — avoid contacting the same patient twice in a week
+    recent = await memory.get(f"last_request:{contact}")
+    if recent and recent.get("sent_within_days", 0) < 7:
+        return {"status": "skipped", "reason": "recently_contacted"}
+
+    # Call a tool — Aphelion handles auth and routing
+    result = await tools.execute("twilio.messaging.create_message", {
+        "To": contact,
+        "Body": f"Hi {patient_name}, we'd love your feedback.",
+        "From": agent.env("TWILIO_PHONE_NUMBER")
+    })
+
+    # Write to memory — persists across executions, scoped to this agent
+    await memory.set(f"last_request:{contact}", {
+        "patient": patient_name, "sent_within_days": 0
+    }, ttl="7d")
+
+    return {"status": "sent", "channel": "sms"}
+
+if __name__ == "__main__":
+    agent.run_local()
+```
+
+You import `tools` and `memory`, call them as async functions, and the CLI injects auth, routing, and persistence at runtime. No HTTP clients, no headers, no session management.
 
 ## Command Reference
 
@@ -256,6 +300,17 @@ aphelion mcp config
 ```
 
 Once configured, you can tell Claude: "Use Aphelion to create a review management agent" and it will call the MCP tools to init, write, deploy, and invoke the agent without you touching the terminal.
+
+### Hosted MCP (no install required)
+
+Add to Claude Desktop or Claude.ai connector settings:
+
+```
+URL:  https://mcp.aphl.ai/mcp
+Auth: Bearer YOUR_APHELION_API_KEY
+```
+
+All tools and agents in the Aphelion marketplace are immediately available to Claude. No CLI required.
 
 ## Configuration
 
