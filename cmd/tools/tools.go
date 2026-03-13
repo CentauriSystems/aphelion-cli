@@ -13,6 +13,11 @@ func NewToolsCmd() *cobra.Command {
 
 	cmd.AddCommand(newDescribeCmd())
 	cmd.AddCommand(newTryCmd())
+	cmd.AddCommand(newSearchCmd())
+	cmd.AddCommand(newSubscribeCmd())
+	cmd.AddCommand(newUnsubscribeCmd())
+	cmd.AddCommand(newListCmd())
+	cmd.AddCommand(newMarketplaceCmd())
 
 	return cmd
 }

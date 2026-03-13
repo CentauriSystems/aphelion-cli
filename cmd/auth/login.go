@@ -134,7 +134,7 @@ func completeOAuthFlow(oauthConfig *authPkg.OAuthConfig, code string) error {
 	spinner.Stop()
 
 	// Save authentication
-	if err := config.SetAuth(tokenResp.AccessToken, userInfo.Sub, userInfo.Email, userInfo.Name); err != nil {
+	if err := config.SetAuth(tokenResp.AccessToken, tokenResp.RefreshToken, userInfo.Sub, userInfo.Email, userInfo.Name, tokenResp.ExpiresIn); err != nil {
 		return fmt.Errorf("failed to save authentication: %w", err)
 	}
 
@@ -185,7 +185,7 @@ func legacyLogin(username, password string) error {
 		return fmt.Errorf("login failed: %w", err)
 	}
 
-	if err := config.SetAuth(authResp.Token, authResp.User.ID, authResp.User.Email, authResp.User.Username); err != nil {
+	if err := config.SetAuth(authResp.Token, "", authResp.User.ID, authResp.User.Email, authResp.User.Username, 0); err != nil {
 		return fmt.Errorf("failed to save authentication: %w", err)
 	}
 

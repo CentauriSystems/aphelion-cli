@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -85,17 +86,20 @@ func (c *Client) request(method, endpoint string, body interface{}, headers map[
 
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		
-		var apiErr APIError
-		apiErr.StatusCode = resp.StatusCode
-		
+		var rawMessage string
 		if respBody, err := io.ReadAll(resp.Body); err == nil {
-			if err := json.Unmarshal(respBody, &apiErr); err != nil {
-				apiErr.Message = string(respBody)
+			var apiErr APIError
+			if err := json.Unmarshal(respBody, &apiErr); err == nil {
+				if apiErr.Message != "" {
+					rawMessage = apiErr.Message
+				} else {
+					rawMessage = apiErr.ErrorMsg
+				}
+			} else {
+				rawMessage = strings.TrimSpace(string(respBody))
 			}
 		}
-		
-		return nil, &apiErr
+		return nil, toActionableError(resp.StatusCode, endpoint, rawMessage)
 	}
 
 	return resp, nil
@@ -145,16 +149,20 @@ func (c *Client) GetWithQuery(endpoint string, params map[string]string, result 
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		var apiErr APIError
-		apiErr.StatusCode = resp.StatusCode
-		
+		var rawMessage string
 		if respBody, err := io.ReadAll(resp.Body); err == nil {
-			if err := json.Unmarshal(respBody, &apiErr); err != nil {
-				apiErr.Message = string(respBody)
+			var apiErr APIError
+			if err := json.Unmarshal(respBody, &apiErr); err == nil {
+				if apiErr.Message != "" {
+					rawMessage = apiErr.Message
+				} else {
+					rawMessage = apiErr.ErrorMsg
+				}
+			} else {
+				rawMessage = strings.TrimSpace(string(respBody))
 			}
 		}
-		
-		return &apiErr
+		return toActionableError(resp.StatusCode, endpoint, rawMessage)
 	}
 
 	if result != nil {
@@ -184,6 +192,114 @@ func (c *Client) Post(endpoint string, body interface{}, result interface{}) err
 
 func (c *Client) Delete(endpoint string) error {
 	resp, err := c.request("DELETE", endpoint, nil, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
+}
+
+func (c *Client) Put(endpoint string, body interface{}, result interface{}) error {
+	resp, err := c.request("PUT", endpoint, body, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if result != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) Patch(endpoint string, body interface{}, result interface{}) error {
+	resp, err := c.request("PATCH", endpoint, body, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if result != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) PostMultipart(endpoint string, fieldName string, fileName string, fileData io.Reader, fields map[string]string, result interface{}) error {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	part, err := writer.CreateFormFile(fieldName, fileName)
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %w", err)
+	}
+	if _, err := io.Copy(part, fileData); err != nil {
+		return fmt.Errorf("failed to write file data: %w", err)
+	}
+
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return fmt.Errorf("failed to write field %s: %w", key, err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	reqURL := c.buildURL(endpoint)
+	req, err := http.NewRequest("POST", reqURL, &buf)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	if token := config.GetAccessToken(); token != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		var rawMessage string
+		if respBody, err := io.ReadAll(resp.Body); err == nil {
+			var apiErr APIError
+			if err := json.Unmarshal(respBody, &apiErr); err == nil {
+				if apiErr.Message != "" {
+					rawMessage = apiErr.Message
+				} else {
+					rawMessage = apiErr.ErrorMsg
+				}
+			} else {
+				rawMessage = strings.TrimSpace(string(respBody))
+			}
+		}
+		return toActionableError(resp.StatusCode, endpoint, rawMessage)
+	}
+
+	if result != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) DeleteWithBody(endpoint string, body interface{}) error {
+	resp, err := c.request("DELETE", endpoint, body, nil)
 	if err != nil {
 		return err
 	}

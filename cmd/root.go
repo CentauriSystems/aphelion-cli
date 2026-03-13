@@ -9,11 +9,20 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/Exmplr-AI/aphelion-cli/cmd/agent"
+	"github.com/Exmplr-AI/aphelion-cli/cmd/agents"
 	"github.com/Exmplr-AI/aphelion-cli/cmd/analytics"
 	"github.com/Exmplr-AI/aphelion-cli/cmd/auth"
+	"github.com/Exmplr-AI/aphelion-cli/cmd/deploy"
+	"github.com/Exmplr-AI/aphelion-cli/cmd/deployments"
+	"github.com/Exmplr-AI/aphelion-cli/cmd/env"
+	"github.com/Exmplr-AI/aphelion-cli/cmd/invoke"
+	mcpCmd "github.com/Exmplr-AI/aphelion-cli/cmd/mcp"
 	"github.com/Exmplr-AI/aphelion-cli/cmd/memory"
 	"github.com/Exmplr-AI/aphelion-cli/cmd/registry"
+	"github.com/Exmplr-AI/aphelion-cli/cmd/schedule"
+	"github.com/Exmplr-AI/aphelion-cli/cmd/status"
 	"github.com/Exmplr-AI/aphelion-cli/cmd/tools"
+	authPkg "github.com/Exmplr-AI/aphelion-cli/pkg/auth"
 	"github.com/Exmplr-AI/aphelion-cli/pkg/config"
 )
 
@@ -68,7 +77,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.aphelion/config.yaml)")
-	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "https://api.aphelion.exmplr.ai", "API base URL")
+	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "https://api.aphl.ai", "API base URL")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "table", "output format (json|yaml|table)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 
@@ -78,12 +87,23 @@ func init() {
 
 	rootCmd.AddCommand(auth.NewAuthCmd())
 	rootCmd.AddCommand(agent.NewAgentCmd())
+	rootCmd.AddCommand(agents.NewAgentsCmd())
 	rootCmd.AddCommand(registry.NewRegistryCmd())
 	rootCmd.AddCommand(memory.NewMemoryCmd())
 	rootCmd.AddCommand(analytics.NewAnalyticsCmd())
 	rootCmd.AddCommand(tools.NewToolsCmd())
+	rootCmd.AddCommand(deploy.NewDeployCmd())
+	rootCmd.AddCommand(deployments.NewDeploymentsCmd())
+	rootCmd.AddCommand(env.NewEnvCmd())
+	rootCmd.AddCommand(invoke.NewInvokeCmd())
+	rootCmd.AddCommand(mcpCmd.NewMCPCmd())
+	rootCmd.AddCommand(schedule.NewScheduleCmd())
+	rootCmd.AddCommand(status.NewStatusCmd())
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newCompletionCmd())
+	rootCmd.AddCommand(newWhoamiCmd())
+	rootCmd.AddCommand(newOpenCmd())
+	rootCmd.AddCommand(newQuickstartCmd())
 }
 
 func initConfig() {
@@ -111,4 +131,13 @@ func initConfig() {
 	}
 
 	config.InitConfig()
+
+	// Register the token refresh callback to avoid circular imports
+	config.RefreshFunc = func(refreshToken string) (string, int, error) {
+		resp, err := authPkg.RefreshAccessToken(refreshToken)
+		if err != nil {
+			return "", 0, err
+		}
+		return resp.AccessToken, resp.ExpiresIn, nil
+	}
 }

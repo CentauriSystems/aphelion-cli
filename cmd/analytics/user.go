@@ -12,6 +12,7 @@ import (
 
 func newUserCmd() *cobra.Command {
 	var timeframe string
+	var last string
 
 	cmd := &cobra.Command{
 		Use:   "user",
@@ -34,6 +35,9 @@ func newUserCmd() *cobra.Command {
 			
 			params := map[string]string{
 				"timeframe": timeframe,
+			}
+			if last != "" {
+				params["period"] = last
 			}
 
 			var analytics api.Analytics
@@ -78,6 +82,7 @@ func newUserCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&timeframe, "timeframe", "t", "day", "time period (hour, day, week, month)")
+	cmd.Flags().StringVar(&last, "last", "", "time period filter (e.g. 7d, 30d)")
 
 	return cmd
 }

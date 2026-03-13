@@ -101,3 +101,131 @@ type SessionMetrics struct {
 	AverageActivities float64 `json:"average_activities"`
 	AverageDuration   float64 `json:"average_duration"`
 }
+
+// Agent identity types
+
+type AgentIdentity struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	Status       string    `json:"status"`
+	ClientID     string    `json:"client_id,omitempty"`
+	ClientSecret string    `json:"client_secret,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	LastActive   time.Time `json:"last_active,omitempty"`
+}
+
+type AgentsResponse struct {
+	Agents []AgentIdentity `json:"agents"`
+	Total  int             `json:"total"`
+}
+
+type CreateAgentRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type RotateSecretResponse struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
+type AgentInspection struct {
+	Agent       AgentIdentity   `json:"agent"`
+	Tools       []string        `json:"tools"`
+	MemoryCount int             `json:"memory_count"`
+	Permissions []AgentPermission `json:"permissions"`
+	Deployment  *DeploymentInfo `json:"deployment,omitempty"`
+	RecentExecs []ExecutionInfo `json:"recent_executions,omitempty"`
+}
+
+type AgentPermission struct {
+	GranteeAgent  string   `json:"grantee_agent"`
+	ResourceAgent string   `json:"resource_agent"`
+	Actions       []string `json:"actions"`
+	ExpiresAt     string   `json:"expires_at,omitempty"`
+}
+
+type DeploymentInfo struct {
+	Status       string `json:"status"`
+	Endpoint     string `json:"endpoint"`
+	Region       string `json:"region"`
+	LastDeployed string `json:"last_deployed"`
+}
+
+type ExecutionInfo struct {
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+	StartedAt string `json:"started_at"`
+	Duration  string `json:"duration"`
+}
+
+type GrantRequest struct {
+	FromAgent string   `json:"from_agent"`
+	ToAgent   string   `json:"to_agent"`
+	Actions   []string `json:"actions"`
+	ExpiresAt string   `json:"expires_at,omitempty"`
+}
+
+// Deployment types
+
+type DeploymentSummary struct {
+	AgentName    string `json:"agent_name"`
+	Status       string `json:"status"`
+	Endpoint     string `json:"endpoint"`
+	Region       string `json:"region"`
+	LastDeployed string `json:"last_deployed"`
+	Executions24 int    `json:"executions_24h"`
+}
+
+type DeploymentsResponse struct {
+	Deployments []DeploymentSummary `json:"deployments"`
+	Total       int                 `json:"total"`
+}
+
+type DeploymentStatus struct {
+	AgentID        string `json:"agent_id"`
+	AgentName      string `json:"agent_name"`
+	Status         string `json:"status"`
+	Endpoint       string `json:"endpoint"`
+	Region         string `json:"region"`
+	LastDeployed   string `json:"last_deployed"`
+	ExecutionCount int    `json:"execution_count"`
+	Version        string `json:"version"`
+}
+
+type LogEntry struct {
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	Message   string `json:"message"`
+}
+
+type LogsResponse struct {
+	Logs []LogEntry `json:"logs"`
+}
+
+type ExecutionRecord struct {
+	ID            string `json:"id"`
+	Timestamp     string `json:"timestamp"`
+	InputSummary  string `json:"input_summary"`
+	OutputSummary string `json:"output_summary"`
+	Duration      string `json:"duration"`
+	Status        string `json:"status"`
+}
+
+type ExecutionsResponse struct {
+	Executions []ExecutionRecord `json:"executions"`
+	Total      int               `json:"total"`
+}
+
+type RollbackResponse struct {
+	Status  string `json:"status"`
+	Version string `json:"version"`
+	Message string `json:"message"`
+}
+
+type RedeployResponse struct {
+	Status   string `json:"status"`
+	Endpoint string `json:"endpoint"`
+	Message  string `json:"message"`
+}

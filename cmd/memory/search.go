@@ -12,35 +12,52 @@ import (
 )
 
 func newSearchCmd() *cobra.Command {
-	var limit int
-	var threshold float64
+	var (
+		limit     int
+		threshold float64
+		agentFlag string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "search [QUERY]",
 		Short: "Search through memories",
-		Long:  "Search through your memories using semantic similarity",
+		Long:  "Search through agent memories using semantic similarity",
 		Args:  cobra.ExactArgs(1),
 		Example: `  # Search for memories about calculations
   aphelion memory search "calculation"
 
   # Search with custom threshold and limit
-  aphelion memory search "weather" --threshold 0.8 --limit 5`,
+  aphelion memory search "weather" --threshold 0.8 --limit 5
+
+  # Search a specific agent's memory
+  aphelion memory search "patient contact history" --agent review-management-agent`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !config.IsAuthenticated() {
-				return fmt.Errorf("authentication required. Please run 'aphelion auth login' first")
+				return fmt.Errorf("session expired. Run: aphelion auth login")
 			}
 
 			query := args[0]
 			client := api.NewClient()
-			
+
 			params := map[string]string{
 				"q":         query,
 				"limit":     strconv.Itoa(limit),
 				"threshold": fmt.Sprintf("%.2f", threshold),
 			}
 
+			// Determine endpoint based on agent context
+			var endpoint string
+			agentID, agentErr := resolveAgentID(agentFlag)
+			if agentErr == nil && agentID != "" {
+				// Agent-scoped search
+				endpoint = fmt.Sprintf("/v2/agents/%s/memory/search", agentID)
+			} else {
+				// Fallback to legacy endpoint
+				endpoint = "/memory/search"
+			}
+
 			var response []api.Memory
-			if err := client.GetWithQuery("/memory/search", params, &response); err != nil {
+			if err := client.GetWithQuery(endpoint, params, &response); err != nil {
 				return fmt.Errorf("failed to search memories: %w", err)
 			}
 
@@ -50,7 +67,7 @@ func newSearchCmd() *cobra.Command {
 			}
 
 			utils.PrintInfo("Found %d memories matching your query", len(response))
-			
+
 			var data []map[string]interface{}
 			for _, memory := range response {
 				data = append(data, map[string]interface{}{
@@ -68,6 +85,7 @@ func newSearchCmd() *cobra.Command {
 
 	cmd.Flags().IntVarP(&limit, "limit", "l", 10, "number of results to return")
 	cmd.Flags().Float64VarP(&threshold, "threshold", "t", 0.7, "similarity threshold (0.0-1.0)")
+	cmd.Flags().StringVar(&agentFlag, "agent", "", "agent name or ID")
 
 	return cmd
 }

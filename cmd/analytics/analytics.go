@@ -14,6 +14,8 @@ func NewAnalyticsCmd() *cobra.Command {
 	cmd.AddCommand(newUserCmd())
 	cmd.AddCommand(newToolsCmd())
 	cmd.AddCommand(newSessionsCmd())
+	cmd.AddCommand(newExecutionsCmd())
+	cmd.AddCommand(newEarningsCmd())
 
 	return cmd
 }

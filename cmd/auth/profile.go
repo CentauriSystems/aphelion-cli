@@ -27,13 +27,10 @@ func newProfileCmd() *cobra.Command {
 				return fmt.Errorf("failed to get profile: %w", err)
 			}
 
-			cfg := config.GetConfig()
-			
 			data := map[string]interface{}{
 				"ID":         profile.ID,
 				"Username":   profile.Username,
 				"Email":      profile.Email,
-				"Last Login": cfg.LastLogin.Format("2006-01-02 15:04:05"),
 			}
 
 			return utils.PrintOutput(data, config.GetOutputFormat())

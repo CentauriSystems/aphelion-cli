@@ -13,6 +13,8 @@ import (
 func newSessionsCmd() *cobra.Command {
 	var timeframe string
 	var userOnly bool
+	var agent string
+	var last string
 
 	cmd := &cobra.Command{
 		Use:   "sessions",
@@ -36,6 +38,12 @@ func newSessionsCmd() *cobra.Command {
 			params := map[string]string{
 				"timeframe": timeframe,
 				"user_only": fmt.Sprintf("%t", userOnly),
+			}
+			if agent != "" {
+				params["agent"] = agent
+			}
+			if last != "" {
+				params["period"] = last
 			}
 
 			var analytics api.Analytics
@@ -64,6 +72,8 @@ func newSessionsCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&timeframe, "timeframe", "t", "day", "time period (hour, day, week, month)")
 	cmd.Flags().BoolVar(&userOnly, "user-only", true, "show only current user's sessions")
+	cmd.Flags().StringVar(&agent, "agent", "", "filter by agent name or ID")
+	cmd.Flags().StringVar(&last, "last", "", "time period filter (e.g. 7d, 30d)")
 
 	return cmd
 }

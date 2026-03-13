@@ -12,10 +12,10 @@ func NewAuthCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(newLoginCmd())
-	cmd.AddCommand(newRegisterCmd())
-	cmd.AddCommand(newProfileCmd())
 	cmd.AddCommand(newLogoutCmd())
-	cmd.AddCommand(newOAuthCmd())
+	cmd.AddCommand(newProfileCmd())
+	cmd.AddCommand(newStatusCmd())
+	cmd.AddCommand(newTokenCmd())
 
 	return cmd
 }

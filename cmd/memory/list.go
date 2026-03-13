@@ -12,63 +12,84 @@ import (
 )
 
 func newListCmd() *cobra.Command {
-	var limit int
-	var sort string
-	var dateFrom, dateTo string
+	var (
+		limit     int
+		sort      string
+		dateFrom  string
+		dateTo    string
+		agentFlag string
+		search    string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List your memories",
-		Long:  "List all memories with pagination and sorting options",
-		Example: `  # List recent memories
+		Short: "List memory entries",
+		Long:  "List all memory entries with pagination and sorting options",
+		Example: `  # List recent memories (from project directory)
   aphelion memory list
+
+  # List memories for a specific agent
+  aphelion memory list --agent review-management-agent
 
   # List with custom limit and sorting
   aphelion memory list --limit 10 --sort oldest
+
+  # Search within memory list
+  aphelion memory list --search "patient"
 
   # List memories from specific date range
   aphelion memory list --date-from 2023-01-01 --date-to 2023-12-31`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !config.IsAuthenticated() {
-				return fmt.Errorf("authentication required. Please run 'aphelion auth login' first")
+				return fmt.Errorf("session expired. Run: aphelion auth login")
 			}
 
 			client := api.NewClient()
-			
-			// Try paginated endpoint first, fallback to basic endpoint
+
+			// Build query params
+			params := map[string]string{
+				"limit": strconv.Itoa(limit),
+				"sort":  sort,
+			}
+			if dateFrom != "" {
+				params["date_from"] = dateFrom
+			}
+			if dateTo != "" {
+				params["date_to"] = dateTo
+			}
+			if search != "" {
+				params["search"] = search
+			}
+
+			// Determine endpoint based on agent context
+			var endpoint string
+			agentID, agentErr := resolveAgentID(agentFlag)
+			if agentErr == nil && agentID != "" {
+				// Agent-scoped memory
+				endpoint = fmt.Sprintf("/v2/agents/%s/memory", agentID)
+			} else {
+				// Fallback to legacy endpoint
+				if limit != 10 || sort != "newest" || dateFrom != "" || dateTo != "" || search != "" {
+					endpoint = "/memory/paginated"
+				} else {
+					endpoint = "/memory"
+				}
+			}
+
 			var memories []api.Memory
-			
-			if limit != 10 || sort != "newest" || dateFrom != "" || dateTo != "" {
-				// Use paginated endpoint when filters are specified
-				params := map[string]string{
-					"limit": strconv.Itoa(limit),
-					"sort":  sort,
-				}
 
-				if dateFrom != "" {
-					params["date_from"] = dateFrom
-				}
-				if dateTo != "" {
-					params["date_to"] = dateTo
-				}
-
-				var response api.MemoriesResponse
-				if err := client.GetWithQuery("/memory/paginated", params, &response); err != nil {
-					// Fallback to basic endpoint
-					if err := client.Get("/memory", &memories); err != nil {
+			var response api.MemoriesResponse
+			if err := client.GetWithQuery(endpoint, params, &response); err != nil {
+				// Fallback to basic endpoint for legacy
+				if agentID == "" {
+					if err := client.Get("/memory", &response); err != nil {
 						return fmt.Errorf("failed to list memories: %w", err)
 					}
 				} else {
-					memories = response.Memories
-				}
-			} else {
-				// Use basic endpoint for simple list
-				var response api.MemoriesResponse
-				if err := client.Get("/memory", &response); err != nil {
 					return fmt.Errorf("failed to list memories: %w", err)
 				}
-				memories = response.Memories
 			}
+			memories = response.Memories
 
 			if len(memories) == 0 {
 				utils.PrintInfo("No memories found")
@@ -76,7 +97,7 @@ func newListCmd() *cobra.Command {
 			}
 
 			utils.PrintInfo("Found %d memories", len(memories))
-			
+
 			var data []map[string]interface{}
 			for _, memory := range memories {
 				data = append(data, map[string]interface{}{
@@ -95,6 +116,8 @@ func newListCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&sort, "sort", "s", "newest", "sort order (newest, oldest)")
 	cmd.Flags().StringVar(&dateFrom, "date-from", "", "filter from date (YYYY-MM-DD)")
 	cmd.Flags().StringVar(&dateTo, "date-to", "", "filter to date (YYYY-MM-DD)")
+	cmd.Flags().StringVar(&agentFlag, "agent", "", "agent name or ID")
+	cmd.Flags().StringVar(&search, "search", "", "search term to filter memories")
 
 	return cmd
 }

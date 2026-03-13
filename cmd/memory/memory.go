@@ -15,6 +15,9 @@ func NewMemoryCmd() *cobra.Command {
 	cmd.AddCommand(newSearchCmd())
 	cmd.AddCommand(newStatsCmd())
 	cmd.AddCommand(newClearCmd())
+	cmd.AddCommand(newGetCmd())
+	cmd.AddCommand(newSetCmd())
+	cmd.AddCommand(newDeleteCmd())
 
 	return cmd
 }

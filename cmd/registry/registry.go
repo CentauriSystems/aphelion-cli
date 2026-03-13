@@ -17,6 +17,10 @@ func NewRegistryCmd() *cobra.Command {
 	cmd.AddCommand(newDeleteCmd())
 	cmd.AddCommand(newMyServicesCmd())
 	cmd.AddCommand(newAddOpenAPICmd())
+	cmd.AddCommand(newUpdateCmd())
+	cmd.AddCommand(newPublishCmd())
+	cmd.AddCommand(newUnpublishCmd())
+	cmd.AddCommand(newEarningsCmd())
 
 	return cmd
 }
