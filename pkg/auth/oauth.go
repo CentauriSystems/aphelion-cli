@@ -27,6 +27,7 @@ type OAuthConfig struct {
 	AuthURL        string `json:"auth_url"`
 	CodeVerifier   string `json:"-"`
 	CodeChallenge  string `json:"-"`
+	State          string `json:"-"`
 }
 
 type AuthResult struct {
@@ -50,6 +51,15 @@ func GeneratePKCE() (string, string, error) {
 	return verifier, challenge, nil
 }
 
+// GenerateState generates a cryptographic random state parameter for CSRF protection
+func GenerateState() (string, error) {
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(stateBytes), nil
+}
+
 // StartOAuthFlow starts the OAuth flow and returns the authorization code
 func StartOAuthFlow(config *OAuthConfig) (*AuthResult, error) {
 	// Generate PKCE parameters
@@ -57,24 +67,32 @@ func StartOAuthFlow(config *OAuthConfig) (*AuthResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate PKCE parameters: %w", err)
 	}
-	
+
 	config.CodeVerifier = codeVerifier
 	config.CodeChallenge = codeChallenge
 
-	// Create authorization URL with PKCE
-	authURL := fmt.Sprintf("%s?response_type=code&client_id=%s&redirect_uri=%s&scope=openid%%20profile%%20email&audience=%s&code_challenge=%s&code_challenge_method=S256",
+	// Generate state parameter for CSRF protection
+	state, err := GenerateState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate state parameter: %w", err)
+	}
+	config.State = state
+
+	// Create authorization URL with PKCE (includes offline_access for refresh tokens)
+	authURL := fmt.Sprintf("%s?response_type=code&client_id=%s&redirect_uri=%s&scope=openid%%20profile%%20email%%20offline_access&audience=%s&code_challenge=%s&code_challenge_method=S256&state=%s",
 		config.AuthURL,
 		url.QueryEscape(config.ClientID),
 		url.QueryEscape(callbackURL),
 		url.QueryEscape(config.Audience),
 		url.QueryEscape(codeChallenge),
+		url.QueryEscape(state),
 	)
 
 	// Start local server to handle callback
 	resultChan := make(chan *AuthResult, 1)
 	server := &http.Server{
 		Addr:    ":" + callbackPort,
-		Handler: createCallbackHandler(resultChan),
+		Handler: createCallbackHandler(resultChan, state),
 	}
 
 	// Start server in background
@@ -108,13 +126,46 @@ func StartOAuthFlow(config *OAuthConfig) (*AuthResult, error) {
 	return result, nil
 }
 
-func createCallbackHandler(resultChan chan<- *AuthResult) http.HandlerFunc {
+func createCallbackHandler(resultChan chan<- *AuthResult, expectedState string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse query parameters
 		query := r.URL.Query()
 		code := query.Get("code")
+		stateParam := query.Get("state")
 		errorParam := query.Get("error")
 		errorDescription := query.Get("error_description")
+
+		// Validate state parameter (CSRF protection)
+		if stateParam != expectedState {
+			result := &AuthResult{Error: "Invalid state parameter — possible CSRF attack. Please try again."}
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authentication Error - Aphelion CLI</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; color: #333; }
+        .error { color: #d32f2f; margin: 20px; }
+        .container { max-width: 500px; margin: 0 auto; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Authentication Error</h1>
+        <div class="error">Invalid state parameter. Please try again.</div>
+        <p>Please return to your terminal and try again.</p>
+        <p>You can close this tab.</p>
+    </div>
+</body>
+</html>`)
+			select {
+			case resultChan <- result:
+			default:
+			}
+			return
+		}
 
 		var result *AuthResult
 

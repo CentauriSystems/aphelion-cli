@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	auth0TokenURL = "https://dev-ay0w6h2rrecsopt8.us.auth0.com/oauth/token"
+	auth0TokenURL = "https://auth.aphl.ai/oauth/token"
 	auth0ClientID = "UbXxpQBSr9AsqpS2ln2jzmsmamromaFC"
 )
 

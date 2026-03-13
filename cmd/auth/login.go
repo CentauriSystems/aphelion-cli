@@ -79,14 +79,22 @@ func oauthLogin(noLaunchBrowser bool) error {
 		}
 		oauthConfig.CodeVerifier = codeVerifier
 		oauthConfig.CodeChallenge = codeChallenge
-		
-		// Build auth URL with PKCE
-		authURL := fmt.Sprintf("%s?response_type=code&client_id=%s&redirect_uri=%s&scope=openid%%20profile%%20email&audience=%s&code_challenge=%s&code_challenge_method=S256",
+
+		// Generate state parameter for CSRF protection
+		state, err := authPkg.GenerateState()
+		if err != nil {
+			return fmt.Errorf("failed to generate state parameter: %w", err)
+		}
+		oauthConfig.State = state
+
+		// Build auth URL with PKCE (includes offline_access for refresh tokens)
+		authURL := fmt.Sprintf("%s?response_type=code&client_id=%s&redirect_uri=%s&scope=openid%%20profile%%20email%%20offline_access&audience=%s&code_challenge=%s&code_challenge_method=S256&state=%s",
 			oauthConfig.AuthURL,
 			oauthConfig.ClientID,
 			oauthConfig.RedirectURI,
 			oauthConfig.Audience,
 			oauthConfig.CodeChallenge,
+			oauthConfig.State,
 		)
 		
 		fmt.Printf("\nPlease open the following URL in your browser:\n\n%s\n\n", authURL)
