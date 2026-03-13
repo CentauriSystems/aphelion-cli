@@ -12,7 +12,7 @@ import (
 
 const (
 	auth0TokenURL = "https://auth.aphl.ai/oauth/token"
-	auth0ClientID = "UbXxpQBSr9AsqpS2ln2jzmsmamromaFC"
+	auth0ClientID = "OCpj3nYGG00qHPaZlBiPn5GCidOn08ql"
 )
 
 // RefreshAccessToken uses a refresh token to obtain a new access token from Auth0.

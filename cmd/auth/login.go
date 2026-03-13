@@ -65,7 +65,7 @@ func oauthLogin(noLaunchBrowser bool) error {
 
 	// Set default client_id if not provided by API
 	if oauthConfig.ClientID == "" {
-		oauthConfig.ClientID = "UbXxpQBSr9AsqpS2ln2jzmsmamromaFC" // Correct client_id
+		oauthConfig.ClientID = "OCpj3nYGG00qHPaZlBiPn5GCidOn08ql" // Correct client_id
 	}
 
 	// Update redirect URI to use localhost
