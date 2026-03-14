@@ -163,6 +163,8 @@ func SaveConfig() error {
 // SetAuth stores authentication tokens and user info.
 func SetAuth(token, refreshToken, userID, email, username string, expiresIn int) error {
 	config := GetConfig()
+	// Ensure API URL is always correct
+	config.APIUrl = "https://api.aphl.ai"
 	config.Auth.AccessToken = token
 	config.Auth.RefreshToken = refreshToken
 	config.Auth.AccountID = userID

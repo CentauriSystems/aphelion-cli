@@ -37,8 +37,8 @@ func newUnsubscribeCmd() *cobra.Command {
 			s.Start()
 
 			client := api.NewClient()
-			endpoint := fmt.Sprintf("/v2/agents/%s/tools/%s", agentID, toolName)
-			err := client.Delete(endpoint)
+			endpoint := fmt.Sprintf("/v2/agents/%s/tools/unsubscribe", agentID)
+			err := client.DeleteWithBody(endpoint, map[string]string{"name": toolName})
 			s.Stop()
 
 			if err != nil {

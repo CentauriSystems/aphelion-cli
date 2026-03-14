@@ -11,7 +11,7 @@ import (
 )
 
 type subscribeRequest struct {
-	Tool string `json:"tool"`
+	Name string `json:"name"`
 }
 
 func newSubscribeCmd() *cobra.Command {
@@ -45,7 +45,7 @@ func newSubscribeCmd() *cobra.Command {
 			client := api.NewClient()
 			endpoint := fmt.Sprintf("/v2/agents/%s/tools/subscribe", agentID)
 			var resp map[string]interface{}
-			err := client.Post(endpoint, subscribeRequest{Tool: toolName}, &resp)
+			err := client.Post(endpoint, subscribeRequest{Name: toolName}, &resp)
 			s.Stop()
 
 			if err != nil {
