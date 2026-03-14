@@ -36,21 +36,21 @@ func newGetCmd() *cobra.Command {
 
 			key := args[0]
 
-			// Determine which agent's memory to read from
-			var targetAgentID string
-			if fromFlag != "" {
-				// Cross-agent read
-				targetAgentID = fromFlag
-			} else {
-				agentID, err := resolveAgentID(agentFlag)
-				if err != nil {
+			// Resolve agent (validates we're in a project or have --agent flag)
+			if fromFlag == "" {
+				if _, err := resolveAgentID(agentFlag); err != nil {
 					return err
 				}
-				targetAgentID = agentID
 			}
 
-			client := api.NewClient()
-			endpoint := fmt.Sprintf("/v2/agents/%s/memory/%s", targetAgentID, key)
+			// Memory v2 endpoints require agent auth
+			agentToken, err := getAgentToken()
+			if err != nil {
+				return fmt.Errorf("failed to get agent token: %w", err)
+			}
+
+			client := api.NewClientWithToken(agentToken)
+			endpoint := fmt.Sprintf("/v2/memory/%s", key)
 
 			var result interface{}
 			if err := client.Get(endpoint, &result); err != nil {

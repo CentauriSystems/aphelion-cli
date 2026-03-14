@@ -61,35 +61,36 @@ func newListCmd() *cobra.Command {
 				params["search"] = search
 			}
 
-			// Determine endpoint based on agent context
-			var endpoint string
-			agentID, agentErr := resolveAgentID(agentFlag)
-			if agentErr == nil && agentID != "" {
-				// Agent-scoped memory
-				endpoint = fmt.Sprintf("/v2/agents/%s/memory", agentID)
-			} else {
-				// Fallback to legacy endpoint
+			// Try agent-scoped memory first (requires agent credentials)
+			var memories []api.Memory
+			_, agentErr := resolveAgentID(agentFlag)
+			if agentErr == nil {
+				agentToken, tokenErr := getAgentToken()
+				if tokenErr == nil {
+					agentClient := api.NewClientWithToken(agentToken)
+					var response api.MemoriesResponse
+					if err := agentClient.GetWithQuery("/v2/memory", params, &response); err == nil {
+						memories = response.Memories
+					}
+				}
+			}
+
+			// Fallback to legacy endpoint with account auth
+			if memories == nil {
+				var endpoint string
 				if limit != 10 || sort != "newest" || dateFrom != "" || dateTo != "" || search != "" {
 					endpoint = "/memory/paginated"
 				} else {
 					endpoint = "/memory"
 				}
-			}
-
-			var memories []api.Memory
-
-			var response api.MemoriesResponse
-			if err := client.GetWithQuery(endpoint, params, &response); err != nil {
-				// Fallback to basic endpoint for legacy
-				if agentID == "" {
+				var response api.MemoriesResponse
+				if err := client.GetWithQuery(endpoint, params, &response); err != nil {
 					if err := client.Get("/memory", &response); err != nil {
 						return fmt.Errorf("failed to list memories: %w", err)
 					}
-				} else {
-					return fmt.Errorf("failed to list memories: %w", err)
 				}
+				memories = response.Memories
 			}
-			memories = response.Memories
 
 			if len(memories) == 0 {
 				utils.PrintInfo("No memories found")

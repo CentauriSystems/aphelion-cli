@@ -17,6 +17,7 @@ import (
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+	tokenOverride string // if set, use this instead of config.GetAccessToken()
 }
 
 type APIError struct {
@@ -41,6 +42,17 @@ func NewClient() *Client {
 		httpClient: &http.Client{
 			Timeout: time.Second * 30,
 		},
+	}
+}
+
+// NewClientWithToken creates a client that uses the given token instead of the global config token.
+func NewClientWithToken(token string) *Client {
+	return &Client{
+		baseURL: config.GetAPIUrl(),
+		httpClient: &http.Client{
+			Timeout: time.Second * 30,
+		},
+		tokenOverride: token,
 	}
 }
 
@@ -71,7 +83,9 @@ func (c *Client) request(method, endpoint string, body interface{}, headers map[
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	if token := config.GetAccessToken(); token != "" {
+	if c.tokenOverride != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.tokenOverride))
+	} else if token := config.GetAccessToken(); token != "" {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	}
 

@@ -38,8 +38,7 @@ func newSetCmd() *cobra.Command {
 			key := args[0]
 			valueStr := args[1]
 
-			agentID, err := resolveAgentID(agentFlag)
-			if err != nil {
+			if _, err := resolveAgentID(agentFlag); err != nil {
 				return err
 			}
 
@@ -57,8 +56,14 @@ func newSetCmd() *cobra.Command {
 				body["ttl"] = ttlFlag
 			}
 
-			client := api.NewClient()
-			endpoint := fmt.Sprintf("/v2/agents/%s/memory/%s", agentID, key)
+			// Memory v2 endpoints require agent auth
+			agentToken, err := getAgentToken()
+			if err != nil {
+				return fmt.Errorf("failed to get agent token: %w", err)
+			}
+
+			client := api.NewClientWithToken(agentToken)
+			endpoint := fmt.Sprintf("/v2/memory/%s", key)
 
 			if err := client.Put(endpoint, body, nil); err != nil {
 				return fmt.Errorf("failed to set memory key %q: %w", key, err)
