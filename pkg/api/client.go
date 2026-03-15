@@ -312,6 +312,84 @@ func (c *Client) PostMultipart(endpoint string, fieldName string, fileName strin
 	return nil
 }
 
+// MultipartFile represents a file to include in a multipart upload.
+type MultipartFile struct {
+	FieldName string
+	FileName  string
+	Data      io.Reader
+}
+
+// PostMultipartFiles uploads multiple files with additional form fields.
+func (c *Client) PostMultipartFiles(endpoint string, files []MultipartFile, fields map[string]string, result interface{}) error {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	for _, f := range files {
+		part, err := writer.CreateFormFile(f.FieldName, f.FileName)
+		if err != nil {
+			return fmt.Errorf("failed to create form file %s: %w", f.FieldName, err)
+		}
+		if _, err := io.Copy(part, f.Data); err != nil {
+			return fmt.Errorf("failed to write file data for %s: %w", f.FieldName, err)
+		}
+	}
+
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return fmt.Errorf("failed to write field %s: %w", key, err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	reqURL := c.buildURL(endpoint)
+	req, err := http.NewRequest("POST", reqURL, &buf)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	if c.tokenOverride != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.tokenOverride))
+	} else if token := config.GetAccessToken(); token != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		var rawMessage string
+		if respBody, err := io.ReadAll(resp.Body); err == nil {
+			var apiErr APIError
+			if err := json.Unmarshal(respBody, &apiErr); err == nil {
+				if apiErr.Message != "" {
+					rawMessage = apiErr.Message
+				} else {
+					rawMessage = apiErr.ErrorMsg
+				}
+			} else {
+				rawMessage = strings.TrimSpace(string(respBody))
+			}
+		}
+		return toActionableError(resp.StatusCode, endpoint, rawMessage)
+	}
+
+	if result != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (c *Client) DeleteWithBody(endpoint string, body interface{}) error {
 	resp, err := c.request("DELETE", endpoint, body, nil)
 	if err != nil {

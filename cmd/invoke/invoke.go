@@ -65,7 +65,7 @@ func runInvoke(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not authenticated.\nRun: aphelion auth login")
 	}
 
-	agentName := args[0]
+	agentNameOrID := args[0]
 
 	// Resolve input
 	inputData, err := resolveInput()
@@ -79,11 +79,23 @@ func runInvoke(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid JSON input: %w\nProvide valid JSON via --input or --input-file", err)
 	}
 
-	// Build endpoint based on agent name format
-	endpoint := fmt.Sprintf("/v2/agents/%s/invoke", agentName)
-	if strings.Contains(agentName, "/") {
-		parts := strings.SplitN(agentName, "/", 2)
+	// Resolve agent name to ID
+	agentID := agentNameOrID
+	if !isUUID(agentNameOrID) && !strings.Contains(agentNameOrID, "/") {
+		// Try to resolve from project config first
+		resolvedID := resolveAgentID(agentNameOrID)
+		if resolvedID != "" {
+			agentID = resolvedID
+		}
+	}
+
+	// Build endpoint based on agent identifier format
+	var endpoint string
+	if strings.Contains(agentNameOrID, "/") {
+		parts := strings.SplitN(agentNameOrID, "/", 2)
 		endpoint = fmt.Sprintf("/v2/marketplace/%s/agents/%s/invoke", parts[0], parts[1])
+	} else {
+		endpoint = fmt.Sprintf("/v2/agents/%s/invoke", agentID)
 	}
 
 	client := api.NewClient()
@@ -93,7 +105,7 @@ func runInvoke(cmd *cobra.Command, args []string) error {
 	if watch {
 		logSince := time.Now().UTC().Format(time.RFC3339)
 		done := make(chan struct{})
-		go pollLogs(client, agentName, logSince, done)
+		go pollLogs(client, agentID, logSince, done)
 		defer func() {
 			close(done)
 		}()
@@ -186,6 +198,53 @@ func pollLogs(client *api.Client, agentName string, since string, done <-chan st
 			}
 		}
 	}
+}
+
+func isUUID(s string) bool {
+	// Simple UUID check: 8-4-4-4-12 hex chars
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if c != '-' {
+				return false
+			}
+		} else if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func resolveAgentID(name string) string {
+	// If inside a project directory, check if the project agent matches
+	if config.IsProjectDir() {
+		projCfg, err := config.LoadProjectConfig()
+		if err == nil && projCfg != nil {
+			if projCfg.Name == name && projCfg.Agent.ID != "" {
+				return projCfg.Agent.ID
+			}
+		}
+	}
+
+	// Try to resolve via API: list agents and find by name
+	client := api.NewClient()
+	var agentsResp struct {
+		Agents []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"agents"`
+	}
+	if err := client.Get("/v2/agents", &agentsResp); err != nil {
+		return ""
+	}
+	for _, a := range agentsResp.Agents {
+		if a.Name == name {
+			return a.ID
+		}
+	}
+	return ""
 }
 
 func formatDuration(d time.Duration) string {

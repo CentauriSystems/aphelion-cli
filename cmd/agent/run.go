@@ -106,8 +106,26 @@ func exchangeAgentToken() string {
 	return tokenResp.AccessToken
 }
 
+// createSession creates an execution session via POST /v1/agents and returns the session ID.
+func createSession(agentToken string) string {
+	client := api.NewClientWithToken(agentToken)
+	var sessionResp struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := client.Post("/v1/agents", map[string]interface{}{}, &sessionResp); err != nil {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Warning: failed to create execution session: %v\n", err)
+		}
+		return fmt.Sprintf("ses_%d", time.Now().UnixNano())
+	}
+	if verbose {
+		fmt.Fprintf(os.Stderr, "Session created: %s\n", sessionResp.SessionID)
+	}
+	return sessionResp.SessionID
+}
+
 // buildAgentEnv returns the environment variables to inject into the agent subprocess.
-func buildAgentEnv(agentToken, inputJSON string) []string {
+func buildAgentEnv(agentToken, sessionID, inputJSON string) []string {
 	env := append(os.Environ(),
 		"APHELION_API_URL="+config.GetAPIUrl(),
 	)
@@ -120,8 +138,6 @@ func buildAgentEnv(agentToken, inputJSON string) []string {
 		env = append(env, "APHELION_API_TOKEN="+agentToken)
 	}
 
-	// Generate a session ID
-	sessionID := fmt.Sprintf("ses_%d", time.Now().UnixNano())
 	env = append(env, "APHELION_SESSION_ID="+sessionID)
 
 	if inputJSON != "" {
@@ -167,11 +183,12 @@ func runOnce(agentFile string, inputJSON string) error {
 		fmt.Printf("Running agent: %s\n", agentFile)
 	}
 
-	// Exchange agent credentials for JWT
+	// Exchange agent credentials for JWT and create execution session
 	agentToken := exchangeAgentToken()
+	sessionID := createSession(agentToken)
 
 	agentCmd := createAgentCommand(agentFile)
-	agentCmd.Env = buildAgentEnv(agentToken, inputJSON)
+	agentCmd.Env = buildAgentEnv(agentToken, sessionID, inputJSON)
 	agentCmd.Stdout = os.Stdout
 	agentCmd.Stderr = os.Stderr
 
@@ -199,8 +216,9 @@ func runWithCron(agentFile string, inputJSON string) error {
 		}
 
 		agentToken := exchangeAgentToken()
+		sessionID := createSession(agentToken)
 		agentCmd := createAgentCommand(agentFile)
-		agentCmd.Env = buildAgentEnv(agentToken, inputJSON)
+		agentCmd.Env = buildAgentEnv(agentToken, sessionID, inputJSON)
 
 		if verbose {
 			agentCmd.Stdout = os.Stdout
@@ -247,8 +265,9 @@ func runAsDaemon(agentFile string, inputJSON string) error {
 	done := make(chan error, 1)
 	go func() {
 		agentToken := exchangeAgentToken()
+		sessionID := createSession(agentToken)
 		agentCmd := createAgentCommand(agentFile)
-		agentCmd.Env = buildAgentEnv(agentToken, inputJSON)
+		agentCmd.Env = buildAgentEnv(agentToken, sessionID, inputJSON)
 
 		if verbose {
 			agentCmd.Stdout = os.Stdout
@@ -274,10 +293,12 @@ func runAsDaemon(agentFile string, inputJSON string) error {
 func createAgentCommand(agentFile string) *exec.Cmd {
 	// Determine how to run the agent based on file extension
 	ext := strings.ToLower(filepath.Ext(agentFile))
+	agentDir := filepath.Dir(agentFile)
 
 	switch ext {
 	case ".py":
-		return exec.Command("python3", agentFile)
+		python := findPythonInVenv(agentDir)
+		return exec.Command(python, agentFile)
 	case ".js":
 		return exec.Command("node", agentFile)
 	case ".go":
@@ -287,4 +308,17 @@ func createAgentCommand(agentFile string) *exec.Cmd {
 		os.Chmod(agentFile, 0755)
 		return exec.Command(agentFile)
 	}
+}
+
+// findPythonInVenv checks for a project venv and returns its python path,
+// falling back to system python3.
+func findPythonInVenv(agentDir string) string {
+	// Check common venv directory names
+	for _, venvName := range []string{".venv", "venv", "env"} {
+		venvPython := filepath.Join(agentDir, venvName, "bin", "python3")
+		if _, err := os.Stat(venvPython); err == nil {
+			return venvPython
+		}
+	}
+	return "python3"
 }

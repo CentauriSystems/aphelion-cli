@@ -39,10 +39,12 @@ type DeployResponse struct {
 
 // DeploymentStatus is the response from the deployment status endpoint.
 type DeploymentStatus struct {
+	ID       string `json:"id"`
 	Status   string `json:"status"`
 	Endpoint string `json:"endpoint"`
 	Error    string `json:"error"`
 	Region   string `json:"region"`
+	Language string `json:"language"`
 }
 
 func NewDeployCmd() *cobra.Command {
@@ -149,7 +151,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// Step 4: Create tarball
 	fmt.Printf("  Packaging dependencies...       ")
-	tarball, err := createTarball(".")
+	tarball, err := createTarball(".", agentJSONData)
 	if err != nil {
 		printFail()
 		return fmt.Errorf("failed to package agent: %w", err)
@@ -172,8 +174,12 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		fields["visibility"] = "private"
 	}
 
+	files := []api.MultipartFile{
+		{FieldName: "files", FileName: name + ".tar.gz", Data: tarball},
+	}
+
 	var deployResp DeployResponse
-	if err := client.PostMultipart(endpoint, "package", name+".tar.gz", tarball, fields, &deployResp); err != nil {
+	if err := client.PostMultipartFiles(endpoint, files, fields, &deployResp); err != nil {
 		printFail()
 		return fmt.Errorf("upload failed: %w", err)
 	}
@@ -185,33 +191,38 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	s.Suffix = " "
 	s.Start()
 
-	var status DeploymentStatus
-	statusEndpoint := fmt.Sprintf("/v2/agents/%s/deployment", agentID)
+	statusEndpoint := fmt.Sprintf("/v2/agents/%s/deployments", agentID)
 	maxWait := 120 // seconds
 	pollInterval := 2 * time.Second
 
+	var latestDeploy DeploymentStatus
 	for elapsed := 0; elapsed < maxWait; elapsed += int(pollInterval.Seconds()) {
 		time.Sleep(pollInterval)
-		if err := client.Get(statusEndpoint, &status); err != nil {
-			// Transient error, keep polling
+		var deploymentsResp struct {
+			Deployments []DeploymentStatus `json:"deployments"`
+		}
+		if err := client.Get(statusEndpoint, &deploymentsResp); err != nil {
 			continue
 		}
-		if status.Status == "active" || status.Status == "failed" {
-			break
+		if len(deploymentsResp.Deployments) > 0 {
+			latestDeploy = deploymentsResp.Deployments[0]
+			if latestDeploy.Status == "active" || latestDeploy.Status == "failed" {
+				break
+			}
 		}
 	}
 	s.Stop()
 
-	if status.Status == "failed" {
+	if latestDeploy.Status == "failed" {
 		printFail()
 		errMsg := "deployment failed"
-		if status.Error != "" {
-			errMsg = status.Error
+		if latestDeploy.Error != "" {
+			errMsg = latestDeploy.Error
 		}
 		return fmt.Errorf("%s\nCheck logs: aphelion deployments logs %s", errMsg, name)
 	}
 
-	if status.Status != "active" {
+	if latestDeploy.Status != "active" {
 		printFail()
 		return fmt.Errorf("deployment timed out. Check status with: aphelion deployments status")
 	}
@@ -222,14 +233,14 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	printCheck()
 
 	// Step 8: Update project config
-	deployEndpoint := status.Endpoint
+	deployEndpoint := latestDeploy.Endpoint
 	if deployEndpoint == "" {
 		deployEndpoint = fmt.Sprintf("https://api.aphl.ai/v2/agents/%s/invoke", agentID)
 	}
 
 	projCfg.Deployment.Status = "deployed"
 	projCfg.Deployment.Endpoint = deployEndpoint
-	projCfg.Deployment.Region = region
+	projCfg.Deployment.Region = latestDeploy.Region
 	projCfg.Deployment.LastDeployed = time.Now().Format(time.RFC3339)
 
 	if err := config.SaveProjectConfig(projCfg); err != nil {
@@ -280,7 +291,7 @@ func validateAgentCode(language string) error {
 		if mainFile == "" {
 			return fmt.Errorf("no Python agent file found (expected agent.py or main.py)")
 		}
-		cmd := exec.Command("python", "-m", "py_compile", mainFile)
+		cmd := exec.Command("python3", "-m", "py_compile", mainFile)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("syntax error in %s:\n%s", mainFile, strings.TrimSpace(string(output)))
@@ -329,7 +340,8 @@ func findMainFile(language string) string {
 
 // createTarball creates a gzipped tar archive of the project directory.
 // It excludes .git, __pycache__, node_modules, .env, and compiled Python files.
-func createTarball(dir string) (*bytes.Buffer, error) {
+// If agentJSON is provided, it adds agent.json at the root of the tarball.
+func createTarball(dir string, agentJSON []byte) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
 	gw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gw)
@@ -415,6 +427,22 @@ func createTarball(dir string) (*bytes.Buffer, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Add agent.json at root level if provided
+	if len(agentJSON) > 0 {
+		header := &tar.Header{
+			Name:    "agent.json",
+			Size:    int64(len(agentJSON)),
+			Mode:    0644,
+			ModTime: time.Now(),
+		}
+		if err := tw.WriteHeader(header); err != nil {
+			return nil, fmt.Errorf("failed to write agent.json header: %w", err)
+		}
+		if _, err := tw.Write(agentJSON); err != nil {
+			return nil, fmt.Errorf("failed to write agent.json: %w", err)
+		}
 	}
 
 	if err := tw.Close(); err != nil {

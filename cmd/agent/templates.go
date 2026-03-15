@@ -56,14 +56,14 @@ async def main(input: dict) -> dict:
     is_phone = contact.startswith("+") or contact.replace("-","").replace(" ","").isdigit()
 
     if is_phone:
-        result = await tools.execute("twilio.messaging.create_message", {
+        result = await tools.execute("twilio.api20100401message.createmessage", {
             "To": contact,
             "Body": message,
             "From": agent.env("TWILIO_PHONE_NUMBER")
         })
         channel = "sms"
     else:
-        result = await tools.execute("sendgrid.mail.send", {
+        result = await tools.execute("sendgrid.mail_send.sendmail", {
             "personalizations": [{"to": [{"email": contact}]}],
             "from": {"email": agent.env("SENDGRID_FROM_EMAIL")},
             "subject": f"How was your experience, {patient_name}?",
@@ -134,14 +134,14 @@ agent.run(async (input) => {
   let channel;
 
   if (isPhone) {
-    result = await tools.execute("twilio.messaging.create_message", {
+    result = await tools.execute("twilio.api20100401message.createmessage", {
       To: contact,
       Body: message,
       From: agent.env("TWILIO_PHONE_NUMBER"),
     });
     channel = "sms";
   } else {
-    result = await tools.execute("sendgrid.mail.send", {
+    result = await tools.execute("sendgrid.mail_send.sendmail", {
       personalizations: [{ to: [{ email: contact }] }],
       from: { email: agent.env("SENDGRID_FROM_EMAIL") },
       subject: ` + "`How was your experience, ${patientName}?`" + `,
@@ -306,6 +306,15 @@ class Agent:
     @staticmethod
     def _parse_local_input() -> dict:
         """Parse --input or --input-file from sys.argv, or prompt on stdin."""
+        # Check APHELION_INPUT env var first (set by CLI's aphelion agent run)
+        env_input = os.environ.get("APHELION_INPUT", "")
+        if env_input:
+            try:
+                return json.loads(env_input)
+            except json.JSONDecodeError as e:
+                print(f"Error: Invalid JSON in APHELION_INPUT: {e}")
+                sys.exit(1)
+
         args = sys.argv[1:]
 
         for i, arg in enumerate(args):
@@ -369,10 +378,10 @@ def _get_config():
 async def execute(tool_name: str, params: dict) -> dict:
     """Execute a tool via the Aphelion gateway.
 
-    POST /v1/agents/{session_id}/tools/{tool_name}/execute
+    POST /v1/agents/{session_id}/execute
 
     Args:
-        tool_name: Fully qualified tool name (e.g. "twilio.messaging.create_message")
+        tool_name: Fully qualified tool name (e.g. "twilio.api20100401message.createmessage")
         params: Parameters to pass to the tool
 
     Returns:
@@ -383,12 +392,12 @@ async def execute(tool_name: str, params: dict) -> dict:
     """
     token, api_url, session_id = _get_config()
 
-    url = f"{api_url}/v1/agents/{session_id}/tools/{tool_name}/execute"
+    url = f"{api_url}/v1/agents/{session_id}/execute"
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             url,
-            json=params,
+            json={"tool": tool_name, "params": params},
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
@@ -415,7 +424,10 @@ async def execute(tool_name: str, params: dict) -> dict:
             f"Docs:   aphelion tools describe {tool_name}"
         )
 
-    return resp.json()
+    data = resp.json()
+    if data.get("success"):
+        return data.get("result", data)
+    return data
 
 
 async def list() -> list:
@@ -492,7 +504,13 @@ async def get(key: str) -> Optional[dict]:
     if resp.status_code >= 400:
         raise RuntimeError(f"Memory get failed (HTTP {resp.status_code}): {resp.text}")
 
-    return resp.json()
+    data = resp.json()
+    if not data:
+        return None
+    # Unwrap {"value": ...} envelope if present
+    if isinstance(data, dict) and "value" in data:
+        return data["value"] or None
+    return data
 
 
 async def set(key: str, value: dict, ttl: str = None) -> None:
