@@ -262,13 +262,13 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("  Invoke:")
 	fmt.Printf("    aphelion invoke %s \\\n", name)
-	fmt.Println("      --input '{\"patient_name\": \"Jane\", \"contact\": \"+15551234567\"}'")
+	fmt.Println("      --input '{\"key\": \"value\"}'")
 	fmt.Println()
 	fmt.Println("  Or via curl:")
 	fmt.Printf("    curl -X POST %s \\\n", deployEndpoint)
 	fmt.Println("      -H \"Authorization: Bearer $(aphelion auth token)\" \\")
 	fmt.Println("      -H \"Content-Type: application/json\" \\")
-	fmt.Println("      -d '{\"patient_name\": \"Jane\", \"contact\": \"+15551234567\"}'")
+	fmt.Println("      -d '{\"key\": \"value\"}'")
 	fmt.Println()
 
 	return nil

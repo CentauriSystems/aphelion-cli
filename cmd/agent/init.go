@@ -122,25 +122,33 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unsupported language %q — choose python, node, or go", language)
 	}
 
-	// 4. Tool subscriptions
-	fmt.Print("Subscribe to tools (comma-separated, e.g. twilio, sendgrid): ")
-	toolsLine, _ := reader.ReadString('\n')
-	toolsLine = strings.TrimSpace(toolsLine)
+	// Detect non-interactive mode: all three flags provided
+	nonInteractive := initName != "" && initDescription != "" && initLanguage != ""
+
+	// 4. Tool subscriptions (skip in non-interactive mode)
 	var subscribedTools []string
-	if toolsLine != "" {
-		for _, t := range strings.Split(toolsLine, ",") {
-			t = strings.TrimSpace(t)
-			if t != "" {
-				subscribedTools = append(subscribedTools, t)
+	if !nonInteractive {
+		fmt.Print("Subscribe to tools (comma-separated, e.g. twilio, sendgrid): ")
+		toolsLine, _ := reader.ReadString('\n')
+		toolsLine = strings.TrimSpace(toolsLine)
+		if toolsLine != "" {
+			for _, t := range strings.Split(toolsLine, ",") {
+				t = strings.TrimSpace(t)
+				if t != "" {
+					subscribedTools = append(subscribedTools, t)
+				}
 			}
 		}
 	}
 
-	// 5. Create agent identity
+	// 5. Create agent identity (auto-create in non-interactive mode)
 	agentID := ""
 	clientID := ""
 	clientSecret := ""
-	createIdentity := promptConfirm(reader, "Create agent identity now?", true)
+	createIdentity := true
+	if !nonInteractive {
+		createIdentity = promptConfirm(reader, "Create agent identity now?", true)
+	}
 	if createIdentity {
 		id, cid, csec, err := createAgentIdentity(name, description)
 		if err != nil {
@@ -197,7 +205,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  cd %s\n", name)
 	fmt.Printf("  %s\n", installCmd)
 	fmt.Println("  cp .env.example .env    # fill in your values")
-	fmt.Printf("  aphelion agent run %s --input '{\"patient_name\": \"Jane\", \"contact\": \"+15551234567\"}'\n", entryFile)
+	fmt.Printf("  aphelion agent run %s --input '{\"key\": \"value\"}'\n", entryFile)
 	fmt.Println()
 	if len(subscribedTools) > 0 {
 		fmt.Println("Subscribe to tools:")

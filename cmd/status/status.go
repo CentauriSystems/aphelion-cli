@@ -25,6 +25,31 @@ type memoryStatsResponse struct {
 	TotalEntries int `json:"total_entries"`
 }
 
+// memoryEntriesResponse holds the response from GET /v2/agents/{id}/memory/entries.
+type memoryEntriesResponse struct {
+	Entries []interface{} `json:"entries"`
+	Total   int           `json:"total"`
+}
+
+// deploymentsListResponse holds the response from GET /v2/agents/{id}/deployments (plural).
+type deploymentsListResponse struct {
+	Deployments []api.DeploymentSummary `json:"deployments"`
+	Total       int                     `json:"total"`
+}
+
+// toolSubscription represents a single tool subscription from the API.
+type toolSubscription struct {
+	ServiceName string `json:"service_name"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+}
+
+// toolSubscriptionsResponse holds the response from GET /v2/agents/{id}/tools.
+type toolSubscriptionsResponse struct {
+	Tools []toolSubscription `json:"tools"`
+	Total int                `json:"total"`
+}
+
 // executionStatsResponse holds execution statistics from the API.
 type executionStatsResponse struct {
 	Total   int `json:"total"`
@@ -87,13 +112,82 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	var agentStatus agentStatusResponse
 	agentErr := client.Get(fmt.Sprintf("/v2/agents/%s", agentID), &agentStatus)
 
-	// Fetch deployment info (404 means not deployed, which is fine)
+	// Fetch deployment info — try singular endpoint first, then plural
 	var deployment api.DeploymentInfo
 	deployErr := client.Get(fmt.Sprintf("/v2/agents/%s/deployment", agentID), &deployment)
+	if deployErr != nil || deployment.Status == "" {
+		// Try the plural /deployments endpoint (used by the deploy command)
+		var deploys deploymentsListResponse
+		if listErr := client.Get(fmt.Sprintf("/v2/agents/%s/deployments", agentID), &deploys); listErr == nil && len(deploys.Deployments) > 0 {
+			latest := deploys.Deployments[0]
+			deployment.Status = latest.Status
+			deployment.Endpoint = latest.Endpoint
+			deployment.Region = latest.Region
+			deployment.LastDeployed = latest.LastDeployed
+			deployErr = nil
+		}
+	}
 
-	// Fetch memory stats (ignore errors)
+	// If API didn't return deployment info but local config says deployed, trust local config
+	if (deployErr != nil || deployment.Status == "") &&
+		(projCfg.Deployment.Status == "deployed" || projCfg.Deployment.Status == "active") &&
+		projCfg.Deployment.Endpoint != "" {
+		deployment.Status = projCfg.Deployment.Status
+		deployment.Endpoint = projCfg.Deployment.Endpoint
+		deployment.Region = projCfg.Deployment.Region
+		deployment.LastDeployed = projCfg.Deployment.LastDeployed
+		deployErr = nil
+	}
+
+	// Fetch memory stats — try /memory/stats first, then fall back to /memory/entries
+	var memoryCount int
 	var memStats memoryStatsResponse
-	_ = client.Get(fmt.Sprintf("/v2/agents/%s/memory/stats", agentID), &memStats)
+	if statsErr := client.Get(fmt.Sprintf("/v2/agents/%s/memory/stats", agentID), &memStats); statsErr == nil && memStats.TotalEntries > 0 {
+		memoryCount = memStats.TotalEntries
+	} else {
+		// Fall back to /memory/entries which returns a list we can count
+		var memEntries memoryEntriesResponse
+		if entriesErr := client.Get(fmt.Sprintf("/v2/agents/%s/memory/entries", agentID), &memEntries); entriesErr == nil {
+			if memEntries.Total > 0 {
+				memoryCount = memEntries.Total
+			} else {
+				memoryCount = len(memEntries.Entries)
+			}
+		}
+	}
+
+	// Fetch tool subscriptions from API
+	var apiTools []string
+	var toolSubs toolSubscriptionsResponse
+	if toolErr := client.Get(fmt.Sprintf("/v2/agents/%s/tools", agentID), &toolSubs); toolErr == nil && len(toolSubs.Tools) > 0 {
+		for _, t := range toolSubs.Tools {
+			name := t.ServiceName
+			if name == "" {
+				name = t.Name
+			}
+			if name != "" {
+				apiTools = append(apiTools, name)
+			}
+		}
+	}
+	// Merge with local config tools (API takes precedence, but include local ones not in API)
+	toolSet := make(map[string]bool)
+	for _, t := range apiTools {
+		toolSet[t] = true
+	}
+	for _, t := range projCfg.Tools.Subscribed {
+		toolSet[t] = true
+	}
+	var allTools []string
+	// Preserve API order first, then local-only tools
+	for _, t := range apiTools {
+		allTools = append(allTools, t)
+	}
+	for _, t := range projCfg.Tools.Subscribed {
+		if !containsIgnoreCase(apiTools, t) {
+			allTools = append(allTools, t)
+		}
+	}
 
 	// Fetch recent executions (ignore errors)
 	var execResp api.ExecutionsResponse
@@ -103,12 +197,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	var execStats executionStatsResponse
 	_ = client.Get(fmt.Sprintf("/v2/agents/%s/executions/stats", agentID), &execStats)
 
+	// If execution stats came back empty but we have executions response with a total, use that
+	if execStats.Total == 0 && execResp.Total > 0 {
+		execStats.Total = execResp.Total
+	}
+
 	// Fetch env var keys (ignore errors)
 	var envKeys envKeysResponse
 	_ = client.Get(fmt.Sprintf("/v2/agents/%s/env", agentID), &envKeys)
 
 	// Build the dashboard
-	line := strings.Repeat("\u2500", 50)
+	line := strings.Repeat("─", 50)
 
 	fmt.Println()
 	fmt.Println(line)
@@ -119,10 +218,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Agent ID:     %s\n", agentID)
 
 	// Status
-	if agentErr != nil {
+	if agentErr != nil && deployErr != nil {
 		fmt.Printf("  Status:       unknown (could not reach API)\n")
 	} else if deployment.Status == "active" || deployment.Status == "deployed" {
-		fmt.Printf("  Status:       deployed \u2713\n")
+		fmt.Printf("  Status:       deployed ✓\n")
 	} else if deployErr == nil && deployment.Status != "" {
 		fmt.Printf("  Status:       %s\n", deployment.Status)
 	} else {
@@ -133,7 +232,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	if deployment.Endpoint != "" {
 		fmt.Printf("  Endpoint:     %s\n", deployment.Endpoint)
 	} else {
-		fmt.Printf("  Endpoint:     \u2014\n")
+		fmt.Printf("  Endpoint:     —\n")
 	}
 
 	// Region
@@ -152,16 +251,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	} else if projCfg.Deployment.LastDeployed != "" {
 		fmt.Printf("  Last deploy:  %s\n", relativeTime(projCfg.Deployment.LastDeployed))
 	} else {
-		fmt.Printf("  Last deploy:  \u2014\n")
+		fmt.Printf("  Last deploy:  —\n")
 	}
 
 	fmt.Println()
 
 	// Tools
-	if len(projCfg.Tools.Subscribed) > 0 {
-		toolParts := make([]string, len(projCfg.Tools.Subscribed))
-		for i, t := range projCfg.Tools.Subscribed {
-			toolParts[i] = t + " \u2713"
+	if len(allTools) > 0 {
+		toolParts := make([]string, len(allTools))
+		for i, t := range allTools {
+			toolParts[i] = t + " ✓"
 		}
 		fmt.Printf("  Tools:        %s\n", strings.Join(toolParts, "  "))
 	} else {
@@ -189,7 +288,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Memory
-	fmt.Printf("  Memory:       %d entries\n", memStats.TotalEntries)
+	fmt.Printf("  Memory:       %d entries\n", memoryCount)
 
 	// Executions
 	if execStats.Total > 0 {
@@ -209,20 +308,40 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Last run:     %s (%s, %s)\n",
 			relativeTime(last.Timestamp), last.Status, last.Duration)
 	} else {
-		fmt.Printf("  Last run:     \u2014\n")
+		fmt.Printf("  Last run:     —\n")
 	}
 
 	fmt.Println(line)
-	fmt.Printf("  Console: https://beta.console.aphl.ai/agents/%s\n", agentName)
+	fmt.Printf("  Console: https://console.aphl.ai/agents/%s\n", agentName)
 	fmt.Println()
 
 	return nil
 }
 
+// contains checks if a string slice contains a value.
+func contains(slice []string, val string) bool {
+	for _, s := range slice {
+		if s == val {
+			return true
+		}
+	}
+	return false
+}
+
+func containsIgnoreCase(slice []string, val string) bool {
+	lower := strings.ToLower(val)
+	for _, s := range slice {
+		if strings.ToLower(s) == lower {
+			return true
+		}
+	}
+	return false
+}
+
 // relativeTime converts a timestamp string to a human-readable relative time.
 func relativeTime(timestamp string) string {
 	if timestamp == "" {
-		return "\u2014"
+		return "—"
 	}
 
 	// Try common formats
