@@ -52,14 +52,19 @@ type toolSubscriptionsResponse struct {
 
 // executionStatsResponse holds execution statistics from the API.
 type executionStatsResponse struct {
-	Total   int `json:"total"`
-	Success int `json:"success"`
-	Failed  int `json:"failed"`
+	Total     int `json:"total"`
+	Completed int `json:"completed"`
+	Failed    int `json:"failed"`
+}
+
+// envEntry holds a single env var from the API.
+type envEntry struct {
+	Key string `json:"key"`
 }
 
 // envKeysResponse holds the response from GET /v2/agents/{id}/env.
 type envKeysResponse struct {
-	Keys []string `json:"keys"`
+	Env []envEntry `json:"env"`
 }
 
 // NewStatusCmd returns the top-level status command.
@@ -279,8 +284,12 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Env vars
-	if len(envKeys.Keys) > 0 {
-		fmt.Printf("  Env vars:     %s\n", strings.Join(envKeys.Keys, ", "))
+	var envKeyNames []string
+	for _, e := range envKeys.Env {
+		envKeyNames = append(envKeyNames, e.Key)
+	}
+	if len(envKeyNames) > 0 {
+		fmt.Printf("  Env vars:     %s\n", strings.Join(envKeyNames, ", "))
 	} else {
 		fmt.Printf("  Env vars:     none set\n")
 	}
@@ -294,10 +303,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	if execStats.Total > 0 {
 		rate := float64(0)
 		if execStats.Total > 0 {
-			rate = float64(execStats.Success) / float64(execStats.Total) * 100
+			rate = float64(execStats.Completed) / float64(execStats.Total) * 100
 		}
 		fmt.Printf("  Executions:   %d total  |  %d success (%.1f%%)  |  %d failed\n",
-			execStats.Total, execStats.Success, rate, execStats.Failed)
+			execStats.Total, execStats.Completed, rate, execStats.Failed)
 	} else {
 		fmt.Printf("  Executions:   0 total\n")
 	}
