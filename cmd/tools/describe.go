@@ -40,13 +40,37 @@ func newDescribeCmd() *cobra.Command {
 
 func runDescribe(cmd *cobra.Command, args []string) error {
 	toolName := args[0]
-	
+
 	client := api.NewClient()
-	endpoint := fmt.Sprintf("/tools/%s/describe", toolName)
-	
+
+	// First try the direct describe endpoint
+	endpoint := fmt.Sprintf("/v2/tools/%s/describe", toolName)
 	var toolDesc ToolDescription
-	if err := client.Get(endpoint, &toolDesc); err != nil {
+	if err := client.Get(endpoint, &toolDesc); err == nil {
+		return outputToolDescription(toolDesc)
+	}
+
+	// Fallback: search for the service by name, then get its manifest
+	var searchResp struct {
+		Tools []struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		} `json:"tools"`
+	}
+	if err := client.GetWithQuery("/search/tools", map[string]string{"q": toolName}, &searchResp); err != nil {
 		return fmt.Errorf("failed to describe tool %s: %w", toolName, err)
+	}
+
+	if len(searchResp.Tools) == 0 {
+		return fmt.Errorf("tool %q not found.\nSearch available tools: aphelion tools search <query>", toolName)
+	}
+
+	// Get the manifest for the first match
+	serviceID := searchResp.Tools[0].ID
+	manifestEndpoint := fmt.Sprintf("/services/%s/manifest", serviceID)
+	if err := client.Get(manifestEndpoint, &toolDesc); err != nil {
+		return fmt.Errorf("failed to get manifest for %s: %w", toolName, err)
 	}
 
 	return outputToolDescription(toolDesc)

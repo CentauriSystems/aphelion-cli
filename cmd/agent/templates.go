@@ -247,7 +247,7 @@ class Agent:
     def __init__(self):
         self._main_func = None
         self._logger = logging.getLogger("aphelion.agent")
-        handler = logging.StreamHandler(sys.stdout)
+        handler = logging.StreamHandler(sys.stderr)
         handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
         if not self._logger.handlers:
             self._logger.addHandler(handler)
@@ -300,8 +300,8 @@ class Agent:
 
         result = asyncio.run(self._main_func(input_data))
 
-        print()
-        print(json.dumps(result, indent=2, default=str))
+        # Single-line JSON — executor captures last stdout line as result
+        print(json.dumps(result, default=str))
 
     @staticmethod
     def _parse_local_input() -> dict:

@@ -40,7 +40,7 @@ func newSearchCmd() *cobra.Command {
 
 			client := api.NewClient()
 			var resp toolSearchResponse
-			err := client.GetWithQuery("/v2/tools/search", map[string]string{
+			err := client.GetWithQuery("/search/tools", map[string]string{
 				"q": query,
 			}, &resp)
 			s.Stop()

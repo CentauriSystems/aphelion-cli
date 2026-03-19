@@ -13,8 +13,11 @@ import (
 )
 
 type subscribedTool struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	Name            string `json:"name"`
+	ServiceName     string `json:"service_name"`
+	ServiceDesc     string `json:"service_description"`
+	Status          string `json:"status"`
+	SubscriptionID  string `json:"subscription_id"`
 }
 
 type subscribedToolsResponse struct {
@@ -74,7 +77,7 @@ func newListCmd() *cobra.Command {
 			}
 
 			table := tablewriter.NewWriter(os.Stdout)
-			table.SetHeader([]string{"Name", "Status"})
+			table.SetHeader([]string{"Name", "Description", "Status"})
 			table.SetAutoWrapText(false)
 			table.SetAutoFormatHeaders(true)
 			table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
@@ -87,7 +90,19 @@ func newListCmd() *cobra.Command {
 			table.SetTablePadding("  ")
 
 			for _, t := range resp.Tools {
-				table.Append([]string{t.Name, t.Status})
+				name := t.Name
+				if name == "" {
+					name = t.ServiceName
+				}
+				desc := t.ServiceDesc
+				if len(desc) > 50 {
+					desc = desc[:47] + "..."
+				}
+				status := t.Status
+				if status == "" {
+					status = "active"
+				}
+				table.Append([]string{name, desc, status})
 			}
 
 			table.Render()

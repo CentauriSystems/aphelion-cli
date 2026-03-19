@@ -13,15 +13,18 @@ import (
 )
 
 type marketplaceTool struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Category    string  `json:"category"`
-	Pricing     string  `json:"pricing"`
-	Rating      float64 `json:"rating"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Category    string      `json:"category"`
+	Pricing     interface{} `json:"pricing"`
+	Rating      float64     `json:"rating"`
+	ToolCount   int         `json:"tool_count"`
+	SpecTitle   string      `json:"spec_title"`
 }
 
 type marketplaceResponse struct {
-	Tools []marketplaceTool `json:"tools"`
+	Tools    []marketplaceTool `json:"tools"`
+	Services []marketplaceTool `json:"services"`
 }
 
 func newMarketplaceCmd() *cobra.Command {
@@ -57,12 +60,17 @@ func newMarketplaceCmd() *cobra.Command {
 
 			client := api.NewClient()
 			var resp marketplaceResponse
-			err := client.GetWithQuery("/v2/tools/marketplace", params, &resp)
+			err := client.GetWithQuery("/services/summary", params, &resp)
 			s.Stop()
 
 			if err != nil {
 				utils.PrintError("Failed to load marketplace: %v", err)
 				return err
+			}
+
+			// Backend returns "services" key, merge into tools
+			if len(resp.Services) > 0 && len(resp.Tools) == 0 {
+				resp.Tools = resp.Services
 			}
 
 			if len(resp.Tools) == 0 {
@@ -81,7 +89,7 @@ func newMarketplaceCmd() *cobra.Command {
 			}
 
 			table := tablewriter.NewWriter(os.Stdout)
-			table.SetHeader([]string{"Name", "Description", "Category", "Pricing", "Rating"})
+			table.SetHeader([]string{"Name", "Description", "Category", "Pricing", "Tools"})
 			table.SetAutoWrapText(false)
 			table.SetAutoFormatHeaders(true)
 			table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
@@ -94,15 +102,24 @@ func newMarketplaceCmd() *cobra.Command {
 			table.SetTablePadding("  ")
 
 			for _, t := range resp.Tools {
+				name := t.Name
+				if t.SpecTitle != "" {
+					name = t.SpecTitle
+				}
 				desc := t.Description
 				if len(desc) > 50 {
 					desc = desc[:47] + "..."
 				}
-				rating := "-"
-				if t.Rating > 0 {
-					rating = fmt.Sprintf("%.1f", t.Rating)
+				pricing := "free"
+				if pm, ok := t.Pricing.(map[string]interface{}); ok {
+					if free, ok := pm["free"].(bool); ok && !free {
+						pricing = "paid"
+					}
+				} else if ps, ok := t.Pricing.(string); ok {
+					pricing = ps
 				}
-				table.Append([]string{t.Name, desc, t.Category, t.Pricing, rating})
+				tools := fmt.Sprintf("%d", t.ToolCount)
+				table.Append([]string{name, desc, t.Category, pricing, tools})
 			}
 
 			table.Render()
