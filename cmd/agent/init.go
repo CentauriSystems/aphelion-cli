@@ -185,10 +185,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  %s/.aphelion/config.yaml\n", name)
 	fmt.Printf("  %s/.aphelion/agent.json\n", name)
 	fmt.Printf("  %s/.aphelion/.gitignore\n", name)
-	fmt.Printf("  %s/aphelion/__init__.py\n", name)
-	fmt.Printf("  %s/aphelion/agent.py\n", name)
-	fmt.Printf("  %s/aphelion/tools.py\n", name)
-	fmt.Printf("  %s/aphelion/memory.py\n", name)
 	fmt.Printf("  %s/.env.example\n", name)
 	fmt.Printf("  %s/README.md\n", name)
 	if language == "python" {
@@ -222,7 +218,6 @@ func createProjectScaffold(name, description, language string, tools []string, a
 		name,
 		filepath.Join(name, ".aphelion"),
 		filepath.Join(name, "tests"),
-		filepath.Join(name, "aphelion"),
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
@@ -310,10 +305,6 @@ func createProjectScaffold(name, description, language string, tools []string, a
 		{filepath.Join(name, ".env.example"), envExampleTemplate, 0644},
 		{filepath.Join(name, "README.md"), readmeContent, 0644},
 		{filepath.Join(name, "tests", testFile), testContent, 0644},
-		{filepath.Join(name, "aphelion", "__init__.py"), sdkInitTemplate, 0644},
-		{filepath.Join(name, "aphelion", "agent.py"), sdkAgentTemplate, 0644},
-		{filepath.Join(name, "aphelion", "tools.py"), sdkToolsTemplate, 0644},
-		{filepath.Join(name, "aphelion", "memory.py"), sdkMemoryTemplate, 0644},
 	}
 
 	for _, f := range files {

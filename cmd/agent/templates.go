@@ -209,9 +209,7 @@ SENDGRID_FROM_EMAIL=noreply@yourdomain.com
 REVIEW_LINK=https://g.page/r/your-review-link
 `
 
-const requirementsTemplate = `# Aphelion SDK dependencies
-httpx>=0.27.0
-python-dotenv>=1.0.0
+const requirementsTemplate = `aphelion-sdk>=0.1.0
 
 # Add your own dependencies below
 `
