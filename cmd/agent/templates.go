@@ -22,74 +22,54 @@ agent = Agent()
 @agent.run
 async def main(input: dict) -> dict:
     """
-    Input:
-      patient_name: str  — required
-      contact: str       — required, phone (+1...) or email
-      visit_type: str    — optional
+    Process input and return results.
 
-    Output:
-      status: "sent" | "failed"
-      channel: "sms" | "email"
-      timestamp: ISO8601
-      error: str | null
+    Customize this function with your agent's logic.
+    Use tools.execute() to call subscribed tools,
+    and memory.get()/set() to persist data across runs.
+
+    Args:
+        input: Dict with your agent's input parameters
+
+    Returns:
+        Dict with your agent's output
     """
+    result = {}
 
-    patient_name = input.get("patient_name")
-    contact = input.get("contact")
-    visit_type = input.get("visit_type", "your recent visit")
+    # Example: Read from memory
+    previous = await memory.get("last_run")
+    if previous:
+        agent.log(f"Previous run: {previous}")
 
-    if not patient_name or not contact:
-        return {"status": "failed", "error": "patient_name and contact are required"}
+    # ------------------------------------------------------------------
+    # Add your agent logic here.
+    #
+    # Call tools you've subscribed to:
+    #   data = await tools.execute("service.operation", {"param": "value"})
+    #
+    # Read secrets from env vars (set via: aphelion env set KEY value):
+    #   api_key = agent.env("MY_API_KEY")
+    #
+    # Search the marketplace for tools:
+    #   aphelion tools search "sms"
+    #   aphelion tools subscribe twilio
+    # ------------------------------------------------------------------
 
-    # Check if we've contacted this patient recently (avoid duplicate requests)
-    recent = await memory.get(f"last_request:{contact}")
-    if recent and recent.get("sent_within_days", 0) < 7:
-        agent.log(f"Skipping {contact} — already contacted within 7 days")
-        return {"status": "skipped", "reason": "recently_contacted"}
+    result["input_received"] = input
+    result["status"] = "success"
 
-    message = (
-        f"Hi {patient_name}, thank you for {visit_type}. "
-        f"We'd love your feedback — it only takes 30 seconds: "
-        f"{agent.env('REVIEW_LINK', default='https://g.page/r/your-review-link')}"
-    )
+    # Save to memory — persists across executions, scoped to this agent
+    await memory.set("last_run", {
+        "input": input,
+        "status": "success"
+    })
 
-    is_phone = contact.startswith("+") or contact.replace("-","").replace(" ","").isdigit()
-
-    if is_phone:
-        result = await tools.execute("twilio.api20100401message.createmessage", {
-            "To": contact,
-            "Body": message,
-            "From": agent.env("TWILIO_PHONE_NUMBER")
-        })
-        channel = "sms"
-    else:
-        result = await tools.execute("sendgrid.mail_send.sendmail", {
-            "personalizations": [{"to": [{"email": contact}]}],
-            "from": {"email": agent.env("SENDGRID_FROM_EMAIL")},
-            "subject": f"How was your experience, {patient_name}?",
-            "content": [{"type": "text/plain", "value": message}]
-        })
-        channel = "email"
-
-    # Write to memory — persists across executions, scoped to this agent
-    await memory.set(f"last_request:{contact}", {
-        "patient": patient_name,
-        "channel": channel,
-        "visit_type": visit_type,
-        "sent_within_days": 0
-    }, ttl="7d")
-
-    return {
-        "status": "sent" if result.get("success") else "failed",
-        "channel": channel,
-        "timestamp": result.get("timestamp"),
-        "error": result.get("error")
-    }
+    return result
 
 
 if __name__ == "__main__":
     # Run locally: python agent.py
-    # Or:          aphelion agent run agent.py --input '{"patient_name": "Jane", "contact": "+15551234567"}'
+    # Or:          aphelion agent run agent.py --input '{"key": "value"}'
     agent.run_local()
 `
 
@@ -108,71 +88,43 @@ const { Agent, tools, memory } = require("@aphelion/sdk");
 const agent = new Agent();
 
 agent.run(async (input) => {
-  const patientName = input.patient_name;
-  const contact = input.contact;
-  const visitType = input.visit_type || "your recent visit";
+  const result = {};
 
-  if (!patientName || !contact) {
-    return { status: "failed", error: "patient_name and contact are required" };
+  // Example: Read from memory
+  const previous = await memory.get("last_run");
+  if (previous) {
+    agent.log(` + "`Previous run: ${JSON.stringify(previous)}`" + `);
   }
 
-  // Check if we've contacted this patient recently (avoid duplicate requests)
-  const recent = await memory.get(` + "`last_request:${contact}`" + `);
-  if (recent && (recent.sent_within_days || 0) < 7) {
-    agent.log(` + "`Skipping ${contact} — already contacted within 7 days`" + `);
-    return { status: "skipped", reason: "recently_contacted" };
-  }
+  // ------------------------------------------------------------------
+  // Add your agent logic here.
+  //
+  // Call tools you've subscribed to:
+  //   const data = await tools.execute("service.operation", { param: "value" });
+  //
+  // Read secrets from env vars (set via: aphelion env set KEY value):
+  //   const apiKey = agent.env("MY_API_KEY");
+  //
+  // Search the marketplace for tools:
+  //   aphelion tools search "sms"
+  //   aphelion tools subscribe twilio
+  // ------------------------------------------------------------------
 
-  const reviewLink = agent.env("REVIEW_LINK", "https://g.page/r/your-review-link");
-  const message =
-    ` + "`Hi ${patientName}, thank you for ${visitType}. " +
-		"We'd love your feedback — it only takes 30 seconds: ${reviewLink}`" + `;
+  result.input_received = input;
+  result.status = "success";
 
-  const isPhone = contact.startsWith("+") || /^[\\d\\s-]+$/.test(contact);
+  // Save to memory — persists across executions, scoped to this agent
+  await memory.set("last_run", {
+    input,
+    status: "success",
+  });
 
-  let result;
-  let channel;
-
-  if (isPhone) {
-    result = await tools.execute("twilio.api20100401message.createmessage", {
-      To: contact,
-      Body: message,
-      From: agent.env("TWILIO_PHONE_NUMBER"),
-    });
-    channel = "sms";
-  } else {
-    result = await tools.execute("sendgrid.mail_send.sendmail", {
-      personalizations: [{ to: [{ email: contact }] }],
-      from: { email: agent.env("SENDGRID_FROM_EMAIL") },
-      subject: ` + "`How was your experience, ${patientName}?`" + `,
-      content: [{ type: "text/plain", value: message }],
-    });
-    channel = "email";
-  }
-
-  // Write to memory — persists across executions, scoped to this agent
-  await memory.set(
-    ` + "`last_request:${contact}`" + `,
-    {
-      patient: patientName,
-      channel,
-      visit_type: visitType,
-      sent_within_days: 0,
-    },
-    { ttl: "7d" }
-  );
-
-  return {
-    status: result.success ? "sent" : "failed",
-    channel,
-    timestamp: result.timestamp || null,
-    error: result.error || null,
-  };
+  return result;
 });
 
 if (require.main === module) {
   // Run locally: node index.js
-  // Or:          aphelion agent run index.js --input '{"patient_name": "Jane", "contact": "+15551234567"}'
+  // Or:          aphelion agent run index.js --input '{"key": "value"}'
   agent.runLocal();
 }
 `
@@ -181,16 +133,9 @@ const agentJSONTemplate = `{
   "name": "{{.Name}}",
   "description": "{{.Description}}",
   "version": "1.0.0",
-  "inputs": {
-    "patient_name": {"type": "string", "required": true},
-    "contact": {"type": "string", "required": true, "description": "Phone (+E.164) or email"},
-    "visit_type": {"type": "string", "required": false}
-  },
+  "inputs": {},
   "outputs": {
-    "status": {"type": "string", "enum": ["sent", "failed", "skipped"]},
-    "channel": {"type": "string", "enum": ["sms", "email"]},
-    "timestamp": {"type": "string", "format": "date-time"},
-    "error": {"type": "string", "nullable": true}
+    "status": {"type": "string"}
   },
   "pricing": {
     "model": "per_execution",
@@ -204,9 +149,11 @@ const agentJSONTemplate = `{
 const envExampleTemplate = `# Copy to .env and fill in your values
 # .env is git-ignored — never commit secrets
 
-TWILIO_PHONE_NUMBER=+1XXXXXXXXXX
-SENDGRID_FROM_EMAIL=noreply@yourdomain.com
-REVIEW_LINK=https://g.page/r/your-review-link
+# Add your secrets here, e.g.:
+# MY_API_KEY=your-key-here
+#
+# Access in agent code:  agent.env("MY_API_KEY")
+# Set for deployed agent: aphelion env set MY_API_KEY your-key-here
 `
 
 const requirementsTemplate = `aphelion-sdk>=0.1.0
@@ -671,7 +618,7 @@ cp .env.example .env
 3. Run locally:
 
 ` + "```bash" + `
-aphelion agent run {{.EntryFile}} --input '{"patient_name": "Jane", "contact": "+15551234567"}'
+aphelion agent run {{.EntryFile}} --input '{"key": "value"}'
 ` + "```" + `
 
 4. Deploy to Aphelion Cloud:
@@ -683,7 +630,7 @@ aphelion deploy
 5. Invoke the deployed agent:
 
 ` + "```bash" + `
-aphelion invoke {{.Name}} --input '{"patient_name": "Jane", "contact": "+15551234567"}'
+aphelion invoke {{.Name}} --input '{"key": "value"}'
 ` + "```" + `
 
 ## Project Structure
@@ -712,14 +659,8 @@ aphelion invoke {{.Name}} --input '{"patient_name": "Jane", "contact": "+1555123
 | ` + "`aphelion status`" + ` | Show project status |
 | ` + "`aphelion memory list`" + ` | List memory entries |
 | ` + "`aphelion deployments logs {{.Name}}`" + ` | View deployment logs |
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| ` + "`TWILIO_PHONE_NUMBER`" + ` | Your Twilio phone number |
-| ` + "`SENDGRID_FROM_EMAIL`" + ` | Sender email for SendGrid |
-| ` + "`REVIEW_LINK`" + ` | Link to your review page |
+| ` + "`aphelion tools search \"<query>\"`" + ` | Search marketplace for tools |
+| ` + "`aphelion tools subscribe <name>`" + ` | Subscribe to a tool |
 `
 
 const testPythonTemplate = `"""
@@ -733,47 +674,15 @@ import pytest
 class TestAgent:
     """Test suite for the agent."""
 
-    def test_missing_patient_name(self):
-        """Agent should fail if patient_name is missing."""
-        input_data = {"contact": "+15551234567"}
-        # TODO: Import and call your agent's main function
-        # result = await main(input_data)
-        # assert result["status"] == "failed"
-        # assert "patient_name" in result["error"]
-        pass
-
-    def test_missing_contact(self):
-        """Agent should fail if contact is missing."""
-        input_data = {"patient_name": "Jane"}
-        # TODO: Import and call your agent's main function
-        # result = await main(input_data)
-        # assert result["status"] == "failed"
-        # assert "contact" in result["error"]
-        pass
-
-    def test_phone_detection(self):
-        """Agent should detect phone numbers starting with +."""
-        # Contacts starting with "+" or all digits should route to SMS
-        assert "+15551234567".startswith("+")
-        assert "5551234567".replace("-", "").replace(" ", "").isdigit()
-
-    def test_email_detection(self):
-        """Agent should detect email addresses."""
-        contact = "jane@example.com"
-        is_phone = contact.startswith("+") or contact.replace("-", "").replace(" ", "").isdigit()
-        assert not is_phone
-
-    def test_valid_input(self):
-        """Agent should process valid input successfully."""
-        input_data = {
-            "patient_name": "Jane Smith",
-            "contact": "+15551234567",
-            "visit_type": "dental cleaning",
-        }
-        # TODO: Mock tools.execute and memory calls, then test
-        # result = await main(input_data)
-        # assert result["status"] == "sent"
-        # assert result["channel"] == "sms"
+    def test_placeholder(self):
+        """Replace this with real tests for your agent."""
+        # Import your agent's main function and test it:
+        #
+        # from agent import main
+        # import asyncio
+        #
+        # result = asyncio.run(main({"key": "value"}))
+        # assert result["status"] == "success"
         pass
 `
 
@@ -786,28 +695,13 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert");
 
 describe("Agent", () => {
-  it("should detect phone numbers", () => {
-    const contact = "+15551234567";
-    const isPhone = contact.startsWith("+") || /^[\d\s-]+$/.test(contact);
-    assert.strictEqual(isPhone, true);
-  });
-
-  it("should detect email addresses", () => {
-    const contact = "jane@example.com";
-    const isPhone = contact.startsWith("+") || /^[\d\s-]+$/.test(contact);
-    assert.strictEqual(isPhone, false);
-  });
-
-  it("should reject missing patient_name", () => {
-    const input = { contact: "+15551234567" };
-    assert.strictEqual(input.patient_name, undefined);
-    // TODO: Import agent and test with mocked tools/memory
-  });
-
-  it("should reject missing contact", () => {
-    const input = { patient_name: "Jane" };
-    assert.strictEqual(input.contact, undefined);
-    // TODO: Import agent and test with mocked tools/memory
+  it("placeholder — replace with real tests", () => {
+    // Import your agent and test it:
+    //
+    // const agent = require("../index.js");
+    // const result = await agent.run({ key: "value" });
+    // assert.strictEqual(result.status, "success");
+    assert.ok(true);
   });
 });
 `
