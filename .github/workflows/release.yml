@@ -99,12 +99,12 @@ jobs:
     - name: Clone Homebrew Tap
       run: |
         export GIT_SSH_COMMAND="ssh -i ~/.ssh/homebrew_deploy_key"
-        git clone git@github.com:Exmplr-AI/homebrew-aphelion.git homebrew-tap
+        git clone git@github.com:CentauriSystems/homebrew-tap.git homebrew-tap
 
     - name: Download Release Checksums
       run: |
         curl -L -o checksums.txt \
-          "https://github.com/Exmplr-AI/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/checksums.txt"
+          "https://github.com/CentauriSystems/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/checksums.txt"
         
         # Extract checksums for each platform
         DARWIN_AMD64_SHA=$(grep "aphelion-darwin-amd64" checksums.txt | cut -d' ' -f1)
@@ -130,18 +130,18 @@ jobs:
           
           if OS.mac?
             if Hardware::CPU.arm?
-              url "https://github.com/Exmplr-AI/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/aphelion-darwin-arm64"
+              url "https://github.com/CentauriSystems/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/aphelion-darwin-arm64"
               sha256 "${{ env.DARWIN_ARM64_SHA }}"
             else
-              url "https://github.com/Exmplr-AI/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/aphelion-darwin-amd64"
+              url "https://github.com/CentauriSystems/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/aphelion-darwin-amd64"
               sha256 "${{ env.DARWIN_AMD64_SHA }}"
             end
           elsif OS.linux?
             if Hardware::CPU.arm?
-              url "https://github.com/Exmplr-AI/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/aphelion-linux-arm64"
+              url "https://github.com/CentauriSystems/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/aphelion-linux-arm64"
               sha256 "${{ env.LINUX_ARM64_SHA }}"
             else
-              url "https://github.com/Exmplr-AI/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/aphelion-linux-amd64"
+              url "https://github.com/CentauriSystems/aphelion-cli/releases/download/${{ steps.version.outputs.VERSION }}/aphelion-linux-amd64"
               sha256 "${{ env.LINUX_AMD64_SHA }}"
             end
           end
