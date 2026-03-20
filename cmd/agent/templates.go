@@ -156,7 +156,7 @@ const envExampleTemplate = `# Copy to .env and fill in your values
 # Set for deployed agent: aphelion env set MY_API_KEY your-key-here
 `
 
-const requirementsTemplate = `aphelion-sdk>=0.1.0
+const requirementsTemplate = `aphelion-sdk>=0.2.0
 
 # Add your own dependencies below
 `
