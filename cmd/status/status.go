@@ -321,7 +321,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println(line)
-	fmt.Printf("  Console: https://console.aphl.ai/agents/%s\n", agentName)
+	fmt.Printf("  Console: https://beta.console.aphl.ai/agents/%s\n", agentName)
 	fmt.Println()
 
 	return nil
